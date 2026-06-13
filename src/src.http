@@ -4,3 +4,15 @@ GET {{src_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+POST {{src_HostAddress}}/api/user/register
+Content-Type: application/json
+
+{
+  "firstName": "Grace",
+  "lastName": "Hopper",
+  "email": "grace@example.com",
+  "password": "Password123!"
+}
+
+###

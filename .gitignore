@@ -5,6 +5,12 @@
 
 # dotenv files
 .env
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+appsettings.*.local.json
 
 # User-specific files
 *.rsuser

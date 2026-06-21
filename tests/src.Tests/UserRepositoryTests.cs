@@ -53,8 +53,12 @@ public sealed class UserRepositoryTests
         Assert.Equal("Grace", user.FirstName);
     }
 
-    [Fact]
-    public async Task ListAsync_searches_name_and_email_fields()
+    [Theory]
+    [InlineData("ada", "Ada")]
+    [InlineData("tur", "Alan")]
+    [InlineData("hopper", "Grace")]
+    [InlineData("grace@example.com", "Grace")]
+    public async Task ListAsync_searches_name_and_email_fields(string search, string expectedFirstName)
     {
         await using var db = await SqliteTestDb.CreateAsync();
         var repository = new UserRepository(db.Context);
@@ -63,11 +67,11 @@ public sealed class UserRepositoryTests
             ("Alan", "Turing", "alan@example.com"),
             ("Grace", "Hopper", "grace@example.com"));
 
-        var (users, totalCount) = await repository.ListAsync(page: 1, pageSize: 10, search: "hopper");
+        var (users, totalCount) = await repository.ListAsync(page: 1, pageSize: 10, search: search);
 
         Assert.Equal(1, totalCount);
         var user = Assert.Single(users);
-        Assert.Equal("Grace", user.FirstName);
+        Assert.Equal(expectedFirstName, user.FirstName);
     }
 
     [Fact]

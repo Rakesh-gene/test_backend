@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using src.Contracts.Common;
 using src.Contracts.Users;
 using src.Data.Repositories;
 using src.Models;
@@ -10,11 +11,50 @@ namespace src.Controllers;
 [Route("api/user")]
 public sealed class UserController(IUserRepository userRepository) : ControllerBase
 {
+    private const int MaxPageSize = 100;
+
+    [HttpGet]
+    [ProducesResponseType(typeof(PagedResponse<UserResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<PagedResponse<UserResponse>>> List(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? search = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (page <= 0)
+        {
+            ModelState.AddModelError(nameof(page), "Page must be greater than zero.");
+        }
+
+        if (pageSize <= 0)
+        {
+            ModelState.AddModelError(nameof(pageSize), "Page size must be greater than zero.");
+        }
+        else if (pageSize > MaxPageSize)
+        {
+            ModelState.AddModelError(nameof(pageSize), $"Page size must be less than or equal to {MaxPageSize}.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        var (users, totalCount) = await userRepository.ListAsync(page, pageSize, search, cancellationToken);
+        var totalPages = totalCount == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pageSize);
+        var response = new PagedResponse<UserResponse>(
+            users.Select(Map).ToList(),
+            new PaginationMetadata(page, pageSize, totalCount, totalPages));
+
+        return Ok(response);
+    }
+
     [HttpGet("{id:int}")]
-    [ProducesResponseType(typeof(UserRegistrationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(UserResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<UserRegistrationResponse>> GetById(int id, CancellationToken cancellationToken)
+    public async Task<ActionResult<UserResponse>> GetById(int id, CancellationToken cancellationToken)
     {
         if (id <= 0)
         {
@@ -30,11 +70,74 @@ public sealed class UserController(IUserRepository userRepository) : ControllerB
         return Ok(Map(user));
     }
 
+    [HttpPut("{id:int}")]
+    [ProducesResponseType(typeof(UserResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<UserResponse>> Update(
+        int id,
+        [FromBody] UserUpdateRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (id <= 0)
+        {
+            ModelState.AddModelError(nameof(id), "User id must be greater than zero.");
+        }
+
+        var firstName = request.FirstName.Trim();
+        var lastName = request.LastName.Trim();
+        var email = request.Email.Trim();
+
+        if (string.IsNullOrWhiteSpace(firstName))
+        {
+            ModelState.AddModelError(nameof(request.FirstName), "First name is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(lastName))
+        {
+            ModelState.AddModelError(nameof(request.LastName), "Last name is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            ModelState.AddModelError(nameof(request.Email), "Email is required.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        if (await userRepository.GetByIdAsync(id, cancellationToken) is null)
+        {
+            return NotFound();
+        }
+
+        if (await userRepository.EmailExistsForAnotherUserAsync(email, id, cancellationToken))
+        {
+            return Conflict(new ProblemDetails
+            {
+                Title = "Update conflict",
+                Detail = "A user with that email already exists.",
+                Status = StatusCodes.Status409Conflict
+            });
+        }
+
+        var updated = await userRepository.UpdateAsync(id, firstName, lastName, email, cancellationToken);
+        if (updated is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(Map(updated));
+    }
+
     [HttpPost("register")]
-    [ProducesResponseType(typeof(UserRegistrationResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(UserResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<UserRegistrationResponse>> Register(
+    public async Task<ActionResult<UserResponse>> Register(
         [FromBody] UserRegistrationRequest request,
         CancellationToken cancellationToken)
     {
@@ -92,6 +195,6 @@ public sealed class UserController(IUserRepository userRepository) : ControllerB
         return CreatedAtAction(nameof(GetById), new { id = response.Id }, response);
     }
 
-    private static UserRegistrationResponse Map(UserAccount user) =>
+    private static UserResponse Map(UserAccount user) =>
         new(user.Id, user.FirstName, user.LastName, user.Email, user.CreatedAtUtc);
 }

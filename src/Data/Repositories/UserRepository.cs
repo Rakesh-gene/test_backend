@@ -9,6 +9,12 @@ public sealed class UserRepository(AppDbContext dbContext) : IUserRepository
     public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken = default) =>
         dbContext.Users.AnyAsync(user => user.Email == email, cancellationToken);
 
+    public Task<bool> EmailExistsForAnotherUserAsync(
+        string email,
+        int userId,
+        CancellationToken cancellationToken = default) =>
+        dbContext.Users.AnyAsync(user => user.Email == email && user.Id != userId, cancellationToken);
+
     public Task<UserAccount?> GetByIdAsync(int id, CancellationToken cancellationToken = default) =>
         dbContext.Users.AsNoTracking().SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
 
@@ -43,6 +49,27 @@ public sealed class UserRepository(AppDbContext dbContext) : IUserRepository
     public async Task<UserAccount> CreateAsync(UserAccount user, CancellationToken cancellationToken = default)
     {
         dbContext.Users.Add(user);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return user;
+    }
+
+    public async Task<UserAccount?> UpdateAsync(
+        int id,
+        string firstName,
+        string lastName,
+        string email,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await dbContext.Users.SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
+        if (user is null)
+        {
+            return null;
+        }
+
+        user.FirstName = firstName;
+        user.LastName = lastName;
+        user.Email = email;
+
         await dbContext.SaveChangesAsync(cancellationToken);
         return user;
     }

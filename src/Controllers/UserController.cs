@@ -70,6 +70,69 @@ public sealed class UserController(IUserRepository userRepository) : ControllerB
         return Ok(Map(user));
     }
 
+    [HttpPut("{id:int}")]
+    [ProducesResponseType(typeof(UserResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<UserResponse>> Update(
+        int id,
+        [FromBody] UserUpdateRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (id <= 0)
+        {
+            ModelState.AddModelError(nameof(id), "User id must be greater than zero.");
+        }
+
+        var firstName = request.FirstName.Trim();
+        var lastName = request.LastName.Trim();
+        var email = request.Email.Trim();
+
+        if (string.IsNullOrWhiteSpace(firstName))
+        {
+            ModelState.AddModelError(nameof(request.FirstName), "First name is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(lastName))
+        {
+            ModelState.AddModelError(nameof(request.LastName), "Last name is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            ModelState.AddModelError(nameof(request.Email), "Email is required.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        if (await userRepository.GetByIdAsync(id, cancellationToken) is null)
+        {
+            return NotFound();
+        }
+
+        if (await userRepository.EmailExistsForAnotherUserAsync(email, id, cancellationToken))
+        {
+            return Conflict(new ProblemDetails
+            {
+                Title = "Update conflict",
+                Detail = "A user with that email already exists.",
+                Status = StatusCodes.Status409Conflict
+            });
+        }
+
+        var updated = await userRepository.UpdateAsync(id, firstName, lastName, email, cancellationToken);
+        if (updated is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(Map(updated));
+    }
+
     [HttpPost("register")]
     [ProducesResponseType(typeof(UserResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]

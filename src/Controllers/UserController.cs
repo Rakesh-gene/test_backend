@@ -195,6 +195,46 @@ public sealed class UserController(IUserRepository userRepository) : ControllerB
         return CreatedAtAction(nameof(GetById), new { id = response.Id }, response);
     }
 
+    [HttpPost("login")]
+    [ProducesResponseType(typeof(UserLoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<UserLoginResponse>> Login(
+        [FromBody] UserLoginRequest request,
+        CancellationToken cancellationToken)
+    {
+        var email = request.Email?.Trim() ?? string.Empty;
+        var password = request.Password ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            ModelState.AddModelError(nameof(request.Email), "Email is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            ModelState.AddModelError(nameof(request.Password), "Password is required.");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        var user = await userRepository.GetByEmailAsync(email, cancellationToken);
+        if (user is null || !PasswordHasher.Verify(password, user.PasswordHash))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Title = "Authentication failed",
+                Detail = "Invalid email or password.",
+                Status = StatusCodes.Status401Unauthorized
+            });
+        }
+
+        return Ok(new UserLoginResponse(Map(user)));
+    }
+
     private static UserResponse Map(UserAccount user) =>
         new(user.Id, user.FirstName, user.LastName, user.Email, user.CreatedAtUtc);
 }

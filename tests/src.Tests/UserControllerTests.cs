@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using src.Contracts.Common;
 using src.Contracts.Users;
@@ -14,6 +16,89 @@ namespace src.Tests;
 
 public sealed class UserControllerTests
 {
+    [Fact]
+    public async Task Login_returns_ok_with_user_details_for_valid_credentials()
+    {
+        using var factory = new RegistrationApiFactory();
+        await SeedUsersAsync(factory, ("Ada", "Lovelace", "ada@example.com"));
+        var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/user/login", new
+        {
+            email = "ada@example.com",
+            password = "Password123!"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<UserLoginResponse>();
+        Assert.NotNull(body);
+        Assert.Equal("ada@example.com", body!.User.Email);
+        Assert.Equal("Ada", body.User.FirstName);
+        Assert.Equal("Lovelace", body.User.LastName);
+    }
+
+    [Fact]
+    public async Task Login_returns_unauthorized_for_invalid_credentials()
+    {
+        using var factory = new RegistrationApiFactory();
+        await SeedUsersAsync(factory, ("Ada", "Lovelace", "ada@example.com"));
+        var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/user/login", new
+        {
+            email = "ada@example.com",
+            password = "WrongPassword123!"
+        });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.NotNull(body);
+        Assert.Equal("Authentication failed", body!.Title);
+        Assert.Equal("Invalid email or password.", body.Detail);
+        Assert.Equal(StatusCodes.Status401Unauthorized, body.Status);
+    }
+
+    [Fact]
+    public async Task Login_returns_bad_request_for_empty_required_fields()
+    {
+        using var factory = new RegistrationApiFactory();
+        var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/user/login", new
+        {
+            email = "",
+            password = ""
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+        Assert.NotNull(body);
+        Assert.Equal(StatusCodes.Status400BadRequest, body!.Status);
+        Assert.Contains("Email", body.Errors.Keys);
+        Assert.Contains("Password", body.Errors.Keys);
+    }
+
+    [Fact]
+    public async Task Login_returns_bad_request_for_missing_required_fields()
+    {
+        using var factory = new RegistrationApiFactory();
+        var client = factory.CreateClient();
+
+        var response = await client.PostAsync(
+            "/api/user/login",
+            new StringContent("""{"email":"ada@example.com"}""", System.Text.Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+        Assert.NotNull(body);
+        Assert.Equal(StatusCodes.Status400BadRequest, body!.Status);
+        Assert.NotEmpty(body.Errors);
+    }
+
     [Fact]
     public async Task Register_returns_created_and_persists_user()
     {

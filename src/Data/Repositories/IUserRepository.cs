@@ -13,6 +13,8 @@ public interface IUserRepository
 
     Task<UserAccount?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
+    Task<UserAccount?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
+
     Task<(IReadOnlyList<UserAccount> Users, int TotalCount)> ListAsync(
         int page,
         int pageSize,

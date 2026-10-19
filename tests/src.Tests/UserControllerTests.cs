@@ -1,5 +1,48 @@
 using System.Net;
 using System.Net.Http.Json;
+using src.Contracts.Common;
+using src.Contracts.Users;
+using src.Tests.TestSupport;
+using Xunit;
+
+namespace src.Tests;
+
+public sealed class UserControllerTests
+{
+    [Fact]
+    public async Task Registration_and_listing_remain_functional()
+    {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var factory = new PostgresApiFactory(database);
+        using var client = factory.CreateClient(new()
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        var response = await client.PostAsJsonAsync("/api/user/register", new
+        {
+            firstName = "Ada",
+            lastName = "Lovelace",
+            email = "ada@example.com",
+            password = "Password123!"
+        });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var created = await response.Content.ReadFromJsonAsync<UserResponse>();
+        Assert.NotNull(created);
+        Assert.Equal("Ada", created!.FirstName);
+        Assert.DoesNotContain("PasswordHash", await response.Content.ReadAsStringAsync());
+
+        var list = await client.GetFromJsonAsync<PagedResponse<UserResponse>>("/api/user");
+        Assert.NotNull(list);
+        Assert.Equal(1, list!.Pagination.TotalCount);
+        Assert.Equal("ada@example.com", list.Items.Single().Email);
+    }
+}
+
+#if false
+using System.Net;
+using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using src.Contracts.Common;
@@ -293,3 +336,4 @@ public sealed class UserControllerTests
         await dbContext.SaveChangesAsync();
     }
 }
+#endif

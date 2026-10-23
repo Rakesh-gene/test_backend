@@ -564,13 +564,17 @@
           "xunit.extensibility.core": "[2.8.1]"
         }
       },
-      "src": {
+      "test.shared": {
+        "type": "Project"
+      },
+      "Test.Webapi": {
         "type": "Project",
         "dependencies": {
           "Dapper": "[2.1.66, )",
           "Microsoft.EntityFrameworkCore.Sqlite": "[8.0.0, )",
           "Npgsql": "[10.0.0, )",
-          "Swashbuckle.AspNetCore": "[8.0.0, )"
+          "Swashbuckle.AspNetCore": "[8.0.0, )",
+          "Test.Shared": "[1.0.0, )"
         }
       }
     }

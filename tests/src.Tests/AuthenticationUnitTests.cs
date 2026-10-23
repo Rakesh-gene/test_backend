@@ -3,10 +3,10 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using src.Controllers;
 using src.Data.Repositories;
-using src.Models;
+using Test.Shared.Models;
 using src.Security;
 using src.Services;
-using src.Contracts.Auth;
+using Test.Shared.Contracts.Auth;
 using Xunit;
 
 namespace src.Tests;

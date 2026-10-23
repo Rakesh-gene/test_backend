@@ -3,8 +3,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using src.Contracts.Auth;
-using src.Contracts.Users;
+using Test.Shared.Contracts.Auth;
+using Test.Shared.Contracts.Users;
 using src.Services;
 using AppAuthenticationService = src.Services.AuthenticationService;
 
@@ -81,6 +81,6 @@ public sealed class AuthController(AppAuthenticationService authenticationServic
         return Ok(new AuthSessionResponse(Map(user)));
     }
 
-    private static UserResponse Map(src.Models.UserAccount user) =>
+    private static UserResponse Map(Test.Shared.Models.UserAccount user) =>
         new(user.Id, user.FirstName, user.LastName, user.Email, user.CreatedAtUtc);
 }

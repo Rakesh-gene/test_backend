@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using src.Models;
+using Test.Shared.Models;
 
 namespace src.Data;
 

@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
-using src.Contracts.Common;
-using src.Contracts.Users;
+using Test.Shared.Contracts.Common;
+using Test.Shared.Contracts.Users;
 using src.Data.Repositories;
-using src.Models;
+using Test.Shared.Models;
 using src.Security;
 
 namespace src.Controllers;

@@ -1,7 +1,7 @@
 using Npgsql;
 using src.Data;
 using src.Data.Repositories;
-using src.Models;
+using Test.Shared.Models;
 using src.Security;
 using src.Tests.TestSupport;
 using Xunit;

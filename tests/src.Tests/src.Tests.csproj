@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/src.csproj" />
+    <ProjectReference Include="../../src/Test.Shared/Test.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

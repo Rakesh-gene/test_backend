@@ -4,7 +4,14 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Test.Webapi</AssemblyName>
+    <RootNamespace>Test.Webapi</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Test.Shared/**/*.cs" />
+    <ProjectReference Include="Test.Shared/Test.Shared.csproj" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Dapper" Version="2.1.66" />

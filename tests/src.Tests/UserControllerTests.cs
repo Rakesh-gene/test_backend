@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
-using src.Contracts.Common;
-using src.Contracts.Users;
+using Test.Shared.Contracts.Common;
+using Test.Shared.Contracts.Users;
 using src.Tests.TestSupport;
 using Xunit;
 

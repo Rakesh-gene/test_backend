@@ -270,6 +270,9 @@
           "System.Composition.Hosting": "6.0.0",
           "System.Composition.Runtime": "6.0.0"
         }
+      },
+      "test.shared": {
+        "type": "Project"
       }
     }
   }

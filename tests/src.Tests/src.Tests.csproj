@@ -8,7 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../src/src.csproj" />
+    <ProjectReference Include="../../src/Test.Webapi/Test.Webapi.csproj" />
+    <ProjectReference Include="../../src/Test.Services/Test.Services.csproj" />
     <ProjectReference Include="../../src/Test.Shared/Test.Shared.csproj" />
   </ItemGroup>
 

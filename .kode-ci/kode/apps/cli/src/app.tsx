@@ -8,6 +8,7 @@ import {
   type ViewState,
 } from '@kode/contracts';
 import { RunnerClient, ensureRunner } from '@kode/runner';
+import type { TelemetryHealth } from '@kode/observability';
 
 const panes = ['Overview', 'Agents', 'Tools', 'Approvals', 'Context', 'Proof', 'Memory'] as const;
 export function App({
@@ -34,6 +35,7 @@ export function App({
   const [filter, setFilter] = useState('');
   const [filtering, setFiltering] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [telemetry, setTelemetry] = useState<TelemetryHealth>();
   const [roots, setRoots] = useState<
     { name: string; path: string; access: string; kind: string }[]
   >([]);
@@ -49,18 +51,26 @@ export function App({
     let disposed = false,
       polling = false;
     const state = emptyView();
+    let lastHealth = 0;
     const poll = async () => {
       if (polling) return;
       polling = true;
       try {
         let page;
+        let pages = 0;
         do {
           page = StoredEvent.array().parse(
             await client.request('events.list', { after: state.cursor, limit: 100 }),
           );
           for (const event of page) projectEvent(state, event);
-        } while (!disposed && page.length === 100);
+          pages++;
+        } while (!disposed && page.length === 100 && pages < 5);
         const registry = (await client.request('folder.list')) as { roots: typeof roots };
+        if (Date.now() - lastHealth >= 2000) {
+          const status = (await client.request('status')) as { telemetry?: TelemetryHealth };
+          if (!disposed) setTelemetry(status.telemetry);
+          lastHealth = Date.now();
+        }
         if (!disposed) {
           setRoots(registry.roots);
           setView({ ...state });
@@ -184,6 +194,25 @@ export function App({
           ? ' FIXTURE MODE • simulated agents and tools • no implementation or native approval execution'
           : ' P03 WORKSPACE • repo commands and environments • provider execution arrives in later phases'}
       </Text>
+      {telemetry && (
+        <Text
+          dimColor={!telemetry.enabled}
+          color={
+            telemetry.traces.dropped +
+              telemetry.logs.dropped +
+              telemetry.traces.exportFailed +
+              telemetry.logs.exportFailed +
+              telemetry.metricExportFailures >
+            0
+              ? 'yellow'
+              : undefined
+          }
+        >
+          {telemetry.enabled
+            ? ` OTLP export · queued ${telemetry.traces.queued + telemetry.logs.queued}/${telemetry.traces.capacity + telemetry.logs.capacity} · dropped ${telemetry.traces.dropped + telemetry.logs.dropped} · failed ${telemetry.traces.exportFailed + telemetry.logs.exportFailed} · metric failures ${telemetry.metricExportFailures}`
+            : ' OTLP export disabled · durable local events remain available'}
+        </Text>
+      )}
       <Box flexDirection={narrow ? 'column' : 'row'}>
         <Box
           flexDirection={narrow ? 'row' : 'column'}
@@ -242,7 +271,7 @@ export function App({
               <Box marginTop={1}>
                 <Text dimColor>
                   {view.cursor} durable events · {tasks.length} tasks · {pending.length} pending ·
-                  no estimated completion
+                  {view.events.length}/200 recent events · no estimated completion
                 </Text>
               </Box>
             </>

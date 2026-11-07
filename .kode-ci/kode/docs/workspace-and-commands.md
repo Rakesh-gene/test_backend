@@ -136,6 +136,13 @@ cache entries. Fresh trees restore their own `obj` metadata and keep independent
 restricts restore sources to the configured package cache. `packages.config` and
 other managers require later adapters.
 
+For solutions that retain inactive compatibility projects, optionally declare
+`dependencies.projects: [src/Api/Api.csproj, tests/Api.Tests/Api.Tests.csproj]`.
+These paths select projects whose restore metadata must be healthy; each must stay
+inside the repository. Without this list, Kode checks every discovered project.
+Successful preparation records the resulting manager configuration identity, so
+first-time creation of user configuration does not force another identical restore.
+
 Per-target leases serialize preparation. A `preparing` receipt is written before
 installation and only validated success becomes `ready`. If its owner crashes,
 the target stays unready and an in-place retry is blocked: inspect any orphan

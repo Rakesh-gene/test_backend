@@ -11,8 +11,8 @@ import { TracerProvider, BatchSpanProcessor } from '@opentelemetry/sdk-trace';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { LoggerProvider, BatchLogRecordProcessor } from '@opentelemetry/sdk-logs';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
-import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
-import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
+import { metricDiagnostics } from './diagnostics.js';
+export type { TelemetryHealth } from './diagnostics.js';
 import pino from 'pino';
 import { redact } from '@kode/contracts';
 
@@ -31,6 +31,11 @@ export function telemetry(
       process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
     );
   const endpointFor = (signal: string) => `${endpoint!.replace(/\/$/, '')}/v1/${signal}`;
+  const diagnostics = metricDiagnostics(
+    enabled,
+    process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT ?? endpointFor('metrics'),
+  );
+  const meterProvider = diagnostics.provider;
   const batch = {
     maxQueueSize: 512,
     maxExportBatchSize: 64,
@@ -42,6 +47,7 @@ export function telemetry(
       ? [
           new BatchSpanProcessor({
             ...batch,
+            selfObsMeterProvider: meterProvider,
             exporter: new OTLPTraceExporter({
               url: process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? endpointFor('traces'),
               timeoutMillis: 500,
@@ -55,24 +61,11 @@ export function telemetry(
       ? [
           new BatchLogRecordProcessor({
             ...batch,
+            selfObsMeterProvider: meterProvider,
             exporter: new OTLPLogExporter({
               url: process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT ?? endpointFor('logs'),
               timeoutMillis: 500,
             }),
-          }),
-        ]
-      : [],
-  });
-  const meterProvider = new MeterProvider({
-    readers: enabled
-      ? [
-          new PeriodicExportingMetricReader({
-            exporter: new OTLPMetricExporter({
-              url: process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT ?? endpointFor('metrics'),
-              timeoutMillis: 500,
-            }),
-            exportIntervalMillis: 1000,
-            exportTimeoutMillis: 700,
           }),
         ]
       : [],
@@ -112,10 +105,11 @@ export function telemetry(
   }
   return {
     log,
+    status: diagnostics.status,
     async operation<T>(
       name: string,
       work: (span: Span) => Promise<T>,
-      options: { kind?: SpanKind } = {},
+      options: { kind?: SpanKind; attributes?: Record<string, string | number | boolean> } = {},
     ): Promise<T> {
       const parent = currentContext();
       const span = tracer.startSpan(name, options, parent);
@@ -135,18 +129,12 @@ export function telemetry(
       });
     },
     async flush() {
-      await Promise.allSettled([
-        traceProvider.forceFlush(),
-        logProvider.forceFlush(),
-        meterProvider.forceFlush(),
-      ]);
+      await Promise.allSettled([traceProvider.forceFlush(), logProvider.forceFlush()]);
+      await meterProvider.forceFlush().catch(() => {});
     },
     async close() {
-      await Promise.allSettled([
-        traceProvider.shutdown(),
-        logProvider.shutdown(),
-        meterProvider.shutdown(),
-      ]);
+      await Promise.allSettled([traceProvider.shutdown(), logProvider.shutdown()]);
+      await meterProvider.shutdown().catch(() => {});
     },
   };
 }

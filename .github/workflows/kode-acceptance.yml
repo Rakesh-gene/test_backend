@@ -61,6 +61,10 @@ jobs:
         run: node scripts/verify.mjs
       - name: Required local feasibility checks
         run: npm run probe -- --offline --require-local
+      - name: Bounded telemetry and real PTY load regression
+        run: node scripts/qualify-observability.mjs
+        env:
+          KODE_LOAD_SECONDS: '10'
       - name: Real backend/frontend acceptance
         run: node scripts/repository-acceptance.mjs
       - name: Record source identity
@@ -83,5 +87,9 @@ jobs:
             host/.kode-ci/kode/.artifacts/P03-nuget-reuse.json
             host/.kode-ci/kode/.artifacts/P03-interrupted-preparation.json
             host/.kode-ci/kode/.artifacts/GAP-005-trace-context.json
+            host/.kode-ci/kode/.artifacts/GAP-005-backpressure.json
+            host/.kode-ci/kode/.artifacts/GAP-005-recovery.json
+            host/.kode-ci/kode/.artifacts/GAP-005-load.json
+            host/.kode-ci/kode/.artifacts/GAP-005-load-failure.json
             host/.kode-ci/kode/.artifacts/repository-acceptance.json
             host/.kode-ci/kode/.artifacts/source-manifest.json

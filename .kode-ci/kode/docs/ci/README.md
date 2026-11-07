@@ -1,5 +1,10 @@
 # Two-repository CI acceptance
 
+Native acceptance passed on Windows x64, Linux x64 and macOS arm64 in
+[run 42341227806](https://github.com/Rakesh-gene/test_backend/actions/runs/42341227806).
+The [GAP-003 report](../gap-reports/GAP-003.md) records inspected artifacts, exact
+snapshot/fixture revisions and remaining qualification.
+
 The user selected these public repositories on 7 November 2026:
 
 - `https://github.com/Rakesh-gene/test_backend` — .NET 10/PostgreSQL API and repository/API tests.

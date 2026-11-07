@@ -103,6 +103,7 @@ export async function startRunner(root: string, options: { testing?: boolean } =
       kind: 'runner.started',
       data: { protocol: 1, pid: process.pid },
     });
+    await projects.recover();
     async function handle(request: Request): Promise<unknown> {
       switch (request.method) {
         case 'ping':
@@ -116,6 +117,7 @@ export async function startRunner(root: string, options: { testing?: boolean } =
             workspace: await projects!.workspace.list(),
             providers: 'not connected',
             fixtureMode: options.testing ?? false,
+            telemetry: await observability!.status(),
           };
         case 'events.list': {
           const p = ReplayParams.parse(request.params);

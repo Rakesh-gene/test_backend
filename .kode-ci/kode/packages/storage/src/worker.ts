@@ -104,6 +104,15 @@ parentPort!.on(
             .prepare('SELECT count(*) AS events, COALESCE(max(seq),0) AS cursor FROM events')
             .get();
           break;
+        case 'countDecision':
+          result = (
+            db
+              .prepare(
+                'SELECT count(*) AS count FROM events WHERE kind = ? AND json_extract(data, ?) = ?',
+              )
+              .get('approval.resolved', '$.requestId', message.data.requestId) as { count: number }
+          ).count;
+          break;
         case 'appendGroupIfAbsent':
           result = db.transaction(() => {
             if (

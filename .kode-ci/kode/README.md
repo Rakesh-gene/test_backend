@@ -135,5 +135,9 @@ redacted before event/log/export sinks.
 
 See [P00](docs/phase-reports/P00.md), [P01](docs/phase-reports/P01.md), the
 [implementation phases](docs/implementation-plan.md), and [stack](docs/tech-stack.md).
-The CI workflow runs clean-install, compile/lint/tests, PTY scenarios, and offline probes on
-Windows/macOS/Linux. A workflow file existing does not establish that those remote jobs ran.
+The [inspected native CI run](docs/gap-reports/GAP-003.md) passed clean installation,
+compile/lint, 29 Kode tests, actual PTY, strict local probes and the selected backend/frontend
+repositories on Windows x64, Linux x64 and macOS arm64. Each repository contributes
+13 tests, and seven integration assertion groups traverse Vite into the PostgreSQL API.
+See [reproduction and fixture configuration](docs/ci/README.md). Other architecture pairs,
+native provider parity and the remaining later-phase gaps stay explicit in the ledger.

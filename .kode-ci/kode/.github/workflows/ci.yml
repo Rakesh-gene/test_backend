@@ -23,9 +23,14 @@ jobs:
       - run: npm test
       - run: npm run test:terminal
       - run: npm run probe -- --offline --require-local
+      - run: node scripts/qualify-observability.mjs
+        env:
+          KODE_LOAD_SECONDS: '10'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: foundation-${{ matrix.os }}
-          path: .artifacts/
+          path: |
+            .artifacts/*.json
+            .artifacts/terminal-*.txt
           include-hidden-files: true

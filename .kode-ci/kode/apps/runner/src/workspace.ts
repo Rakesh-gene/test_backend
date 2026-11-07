@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -14,8 +14,15 @@ import {
   type Observer,
 } from '@kode/workspace';
 import type { Request } from '@kode/contracts';
-import { redact } from '@kode/contracts';
-import { SpanStatusCode, type telemetry } from '@kode/observability';
+import { redact, TraceContext } from '@kode/contracts';
+import {
+  SpanStatusCode,
+  captureTraceContext,
+  traceCorrelation,
+  withTraceContext,
+  type TraceCarrier,
+  type telemetry,
+} from '@kode/observability';
 
 const RootId = z.object({ root: z.string().min(1).max(160) }).strict();
 const TreeId = z.object({ tree: z.string().uuid() }).strict();
@@ -33,6 +40,10 @@ interface Job {
   tree?: string;
   result?: unknown;
   error?: string;
+  traceContext?: TraceCarrier;
+  trace_id?: string;
+  span_id?: string;
+  recovery?: { outcome: 'unknown'; correlation: 'preserved' | 'unavailable'; reconciledAt: string };
 }
 export function workspaceMethods(
   path: string,
@@ -53,6 +64,55 @@ export function workspaceMethods(
   }
   return {
     workspace,
+    async recover() {
+      const directory = join(workspace.state, 'jobs');
+      const files = await readdir(directory).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return [];
+        throw error;
+      });
+      for (const name of files) {
+        if (!/^[a-f0-9-]{36}\.json$/.test(name)) continue;
+        const file = join(directory, name);
+        const job = await json<Job>(file);
+        if (job.id + '.json' !== name) throw new Error('Job descriptor identity mismatch.');
+        if (job.status !== 'running') continue;
+        const saved = TraceContext.safeParse(job.traceContext);
+        const preserved = withTraceContext(saved.success ? saved.data : undefined, () =>
+          Boolean(captureTraceContext().traceparent),
+        );
+        await withTraceContext(saved.success ? saved.data : undefined, () =>
+          observability.operation('workspace.job.reconcile', async (span) => {
+            const correlation = preserved ? 'preserved' : 'unavailable';
+            span.setAttribute('kode.job.id', job.id);
+            span.setAttribute('kode.job.prior_outcome', 'unknown');
+            span.setAttribute('kode.trace.continuity', correlation);
+            job.status = 'blocked';
+            job.error =
+              'Interrupted runner: prior action outcome is unknown. Reconcile process/environment state before retrying; no action was replayed.';
+            job.recovery = {
+              outcome: 'unknown',
+              correlation,
+              reconciledAt: new Date().toISOString(),
+            };
+            // Audit the real reconciliation attempt before publishing its descriptor.
+            // A crash here may cause another reconciliation attempt, never an action retry.
+            await observer({
+              phase: 'job',
+              name: job.id,
+              jobId: job.id,
+              root: job.root,
+              tree: job.tree,
+              status: 'blocked',
+              outcome: 'unknown',
+              correlation,
+              recovery: true,
+              replayed: false,
+            });
+            await atomicJson(file, job);
+          }),
+        );
+      }
+    },
     async stop() {
       for (const item of active.values()) item.controller.abort();
       await Promise.allSettled([...active.values()].map((item) => item.done));
@@ -135,6 +195,8 @@ export function workspaceMethods(
             kind: p.kind,
             root: destination.root.id,
             tree: p.tree,
+            traceContext: captureTraceContext(),
+            ...traceCorrelation(),
           };
           const file = join(workspace.state, 'jobs', `${id}.json`);
           await mkdir(join(workspace.state, 'jobs'), { recursive: true });
@@ -184,6 +246,10 @@ export function workspaceMethods(
               span.setAttribute('kode.job.id', id);
               span.setAttribute('kode.root.id', destination.root.id);
               if (p.tree) span.setAttribute('kode.tree.id', p.tree);
+              job.traceContext = captureTraceContext();
+              Object.assign(job, traceCorrelation());
+              await atomicJson(file, job); // Persist correlation before any external dispatch.
+              await observe({ phase: 'job', name: id, status: 'running', dispatch: 'pending' });
               await execute();
               if (job.status !== 'passed')
                 span.setStatus({ code: SpanStatusCode.ERROR, message: `Job ${job.status}` });

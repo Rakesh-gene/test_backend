@@ -1,0 +1,36 @@
+# Proposed feature proof plan; approved alongside spec.md.
+# api and web are named registered roots with their own kode.yaml files.
+version: 1
+feature: F-001
+proofs:
+  - id: P-001
+    requirements: [AC-001]
+    description: An authenticated user can create an organization through the API.
+    method: integration
+    repo: api
+    command: integration
+    scenarios: [organization.create.authenticated, organization.create.unauthorized]
+    assertions:
+      - Authenticated creation returns 201 with the expected organization data.
+      - The organization is persisted and can be retrieved by its owner.
+      - Unauthenticated creation is rejected without creating a record.
+    required: true
+  - id: P-002
+    requirements: [AC-002]
+    description: A user creates an organization through the browser against the real API.
+    method: ui
+    repo: web
+    command: ui
+    services: [api.app, web.app]
+    scenarios: [organization.create.browser]
+    assertions:
+      - Submission creates an organization through the running API.
+      - The new organization appears after a browser reload.
+      - Invalid input displays the specified validation message.
+    evidence: [junit, browser-trace, screenshot]
+    required: true
+
+# Scenarios identify stable tests in command reports. An adapter must resolve
+# these IDs to executed assertions; a prose assertion is not execution evidence.
+# The runner records resolved spec/plan/manifest/content hashes in evidence.json.
+# Service bindings supply URLs/ports to the commands without embedding secrets.

@@ -1,0 +1,87 @@
+name: Kode three-platform acceptance
+on:
+  push:
+    branches: ['kode/acceptance-*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    name: Kode / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: host/.kode-ci/kode
+    env:
+      KODE_VERIFY_TIMEOUT_MS: '240000'
+      KODE_BACKEND_ROOT: ${{ github.workspace }}/backend
+      KODE_FRONTEND_ROOT: ${{ github.workspace }}/frontend
+      ASDS_POSTGRES_CONNECTION_STRING: Host=127.0.0.1;Port=5432;Database=kode_fixture;Username=postgres;Password=postgres;Pooling=false
+    steps:
+      - name: Checkout versioned Kode harness
+        uses: actions/checkout@v4
+        with:
+          path: host
+          persist-credentials: false
+      - name: Checkout backend fixture
+        uses: actions/checkout@v4
+        with:
+          repository: Rakesh-gene/test_backend
+          ref: 6412c17fa2d4d73f435cb14c92fe14f46bd28f06
+          path: backend
+          persist-credentials: false
+      - name: Checkout frontend fixture
+        uses: actions/checkout@v4
+        with:
+          repository: Rakesh-gene/test_frontend
+          ref: fe1e7ace68dc2f05fd1e8954b2b6015fc87617cc
+          path: frontend
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+          cache: npm
+          cache-dependency-path: host/.kode-ci/kode/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.101
+      - name: Provision native fixture PostgreSQL
+        uses: ikalnytskyi/action-setup-postgres@325155bfd7807b2a21ac9c2c7bb9b9a6eacc44df # v9
+        with:
+          postgres-version: '15'
+          database: kode_fixture
+      - run: npm ci
+      - run: node scripts/setup-xerj.mjs
+      - name: Foundation, workspace, environment, tracing and real PTY checks
+        run: node scripts/verify.mjs
+      - name: Required local feasibility checks
+        run: npm run probe -- --offline --require-local
+      - name: Real backend/frontend acceptance
+        run: node scripts/repository-acceptance.mjs
+      - name: Record source identity
+        if: always()
+        run: node scripts/source-manifest.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kode-acceptance-${{ matrix.os }}
+          include-hidden-files: true
+          retention-days: 14
+          path: |
+            host/.kode-ci/kode/.artifacts/verification.json
+            host/.kode-ci/kode/.artifacts/vitest.json
+            host/.kode-ci/kode/.artifacts/terminal-*.json
+            host/.kode-ci/kode/.artifacts/terminal-*.txt
+            host/.kode-ci/kode/.artifacts/P00-probes.json
+            host/.kode-ci/kode/.artifacts/P02-baseline.json
+            host/.kode-ci/kode/.artifacts/P03-npm-reuse.json
+            host/.kode-ci/kode/.artifacts/P03-nuget-reuse.json
+            host/.kode-ci/kode/.artifacts/P03-interrupted-preparation.json
+            host/.kode-ci/kode/.artifacts/GAP-005-trace-context.json
+            host/.kode-ci/kode/.artifacts/repository-acceptance.json
+            host/.kode-ci/kode/.artifacts/source-manifest.json

@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../../packages/workspace" },
+    {
+      "path": "../../packages/contracts"
+    },
+    {
+      "path": "../../packages/storage"
+    },
+    {
+      "path": "../../packages/observability"
+    }
+  ]
+}

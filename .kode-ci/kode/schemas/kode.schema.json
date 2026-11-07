@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "version": { "type": "number", "const": 1 },
+    "dependencies": {
+      "default": { "manager": "none", "reuse": "auto", "inputs": [], "flags": [] },
+      "type": "object",
+      "properties": {
+        "manager": { "type": "string", "enum": ["none", "npm", "nuget"] },
+        "reuse": { "default": "auto", "type": "string", "enum": ["auto", "never"] },
+        "prepare": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,80}$" },
+        "validate": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,80}$" },
+        "projects": {
+          "minItems": 1,
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "inputs": { "default": [], "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "flags": { "default": [], "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["manager", "reuse", "inputs", "flags"],
+      "additionalProperties": false
+    },
+    "commands": {
+      "type": "object",
+      "propertyNames": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,80}$" },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": { "type": "string", "maxLength": 8192 }
+          },
+          "cwd": { "default": ".", "type": "string", "minLength": 1 },
+          "env": {
+            "default": {},
+            "type": "object",
+            "propertyNames": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+            "additionalProperties": { "type": "string" }
+          },
+          "timeout_seconds": {
+            "default": 180,
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 3600
+          },
+          "services": {
+            "default": [],
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,80}$" }
+          },
+          "reports": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "format": { "type": "string", "enum": ["junit", "json"] },
+                "path": { "type": "string", "minLength": 1 }
+              },
+              "required": ["format", "path"],
+              "additionalProperties": false
+            }
+          },
+          "artifacts": {
+            "default": [],
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "required": ["run", "cwd", "env", "timeout_seconds", "services", "reports", "artifacts"],
+        "additionalProperties": false
+      }
+    },
+    "services": {
+      "default": {},
+      "type": "object",
+      "propertyNames": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,80}$" },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "command": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,80}$" },
+          "depends_on": {
+            "default": [],
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,80}$" }
+          },
+          "port": {
+            "default": "auto",
+            "anyOf": [
+              { "type": "string", "const": "auto" },
+              { "type": "integer", "minimum": 1024, "maximum": 65535 }
+            ]
+          },
+          "readiness": {
+            "type": "object",
+            "properties": {
+              "http": { "type": "string", "minLength": 1 },
+              "timeout_seconds": {
+                "default": 60,
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 300
+              }
+            },
+            "required": ["http", "timeout_seconds"],
+            "additionalProperties": false
+          },
+          "setup": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,80}$" },
+          "cleanup": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,80}$" }
+        },
+        "required": ["command", "depends_on", "port", "readiness"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["version", "dependencies", "commands", "services"],
+  "additionalProperties": false
+}

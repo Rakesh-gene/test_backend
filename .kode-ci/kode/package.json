@@ -1,0 +1,48 @@
+{
+  "name": "kode-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": "24.22.1",
+    "npm": "11.19.1"
+  },
+  "packageManager": "npm@11.19.1",
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run build && vitest run",
+    "check": "npm run typecheck && npm run lint && npm test",
+    "kode": "node apps/cli/dist/index.js",
+    "probe": "npm run build && node scripts/probe.mjs",
+    "test:terminal": "npm run build && node scripts/terminal-test.mjs",
+    "schemas": "npm run build && node scripts/generate-schemas.mjs",
+    "probe:providers": "node scripts/provider-status.mjs",
+    "verify": "node scripts/verify.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "better-sqlite3": "12.8.0",
+    "eslint": "10.14.0",
+    "ink-testing-library": "4.0.0",
+    "node-pty": "1.2.0-beta.18",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "5.1.0"
+  },
+  "overrides": {
+    "zod": "4.6.7",
+    "minimatch": "11.0.5"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "jsonrpc": { "type": "string", "const": "2.0" },
+    "version": { "type": "number", "const": 1 },
+    "id": { "type": ["string", "number", "null"] },
+    "result": {},
+    "error": {
+      "type": "object",
+      "properties": {
+        "code": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
+        "message": { "type": "string" },
+        "data": {
+          "type": "object",
+          "properties": { "code": { "type": "string" } },
+          "required": ["code"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["code", "message"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["jsonrpc", "version", "id"],
+  "additionalProperties": false
+}

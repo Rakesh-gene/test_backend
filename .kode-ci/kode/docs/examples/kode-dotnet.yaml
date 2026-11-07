@@ -1,0 +1,20 @@
+# Executable P03 repository contract for a PackageReference .NET project.
+version: 1
+dependencies:
+  manager: nuget
+  reuse: auto
+  prepare: restore
+commands:
+  restore:
+    run: [dotnet, restore]
+    timeout_seconds: 300
+  build:
+    run: [dotnet, build, --no-restore]
+    timeout_seconds: 180
+  test:
+    run: [dotnet, test, --no-restore]
+    timeout_seconds: 300
+
+# Uses the existing NuGet package-cache configuration. Kode ensures this
+# worktree has valid restore outputs before running --no-restore commands.
+# Add --locked-mode when the project maintains a compatible packages.lock.json.

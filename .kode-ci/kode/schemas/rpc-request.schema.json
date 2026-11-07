@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "jsonrpc": { "type": "string", "const": "2.0" },
+    "version": { "type": "number", "const": 1 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "token": { "type": "string", "minLength": 32, "maxLength": 256 },
+    "traceContext": {
+      "type": "object",
+      "properties": {
+        "traceparent": { "type": "string", "maxLength": 512 },
+        "tracestate": { "type": "string", "maxLength": 512 }
+      },
+      "additionalProperties": false
+    },
+    "method": {
+      "type": "string",
+      "enum": [
+        "ping",
+        "status",
+        "events.list",
+        "fixture.load",
+        "approval.respond",
+        "test.slowQuery",
+        "shutdown",
+        "workspace.init",
+        "folder.add",
+        "folder.list",
+        "folder.remove",
+        "baseline.capture",
+        "tree.create",
+        "tree.cleanup",
+        "tree.retain",
+        "repo.init",
+        "repo.inspect",
+        "env.inspect",
+        "job.start",
+        "job.get",
+        "job.cancel"
+      ]
+    },
+    "params": {
+      "default": {},
+      "type": "object",
+      "propertyNames": { "type": "string" },
+      "additionalProperties": {}
+    }
+  },
+  "required": ["jsonrpc", "version", "id", "token", "method", "params"],
+  "additionalProperties": false
+}

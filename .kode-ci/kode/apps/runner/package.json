@@ -1,0 +1,19 @@
+{
+  "name": "@kode/runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@kode/workspace": "0.1.0",
+    "zod": "4.6.7",
+    "@kode/contracts": "0.1.0",
+    "@kode/storage": "0.1.0",
+    "@kode/observability": "0.1.0"
+  }
+}

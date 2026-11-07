@@ -1,0 +1,31 @@
+name: Foundation acceptance
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  foundation:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.22.1
+          cache: npm
+      - run: npm ci
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.101
+      - run: node scripts/setup-xerj.mjs
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run test:terminal
+      - run: npm run probe -- --offline --require-local
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: foundation-${{ matrix.os }}
+          path: .artifacts/
+          include-hidden-files: true

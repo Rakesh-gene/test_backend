@@ -1,0 +1,32 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "packages/contracts"
+    },
+    {
+      "path": "packages/storage"
+    },
+    {
+      "path": "packages/observability"
+    },
+    {
+      "path": "packages/execution"
+    },
+    {
+      "path": "packages/providers"
+    },
+    {
+      "path": "packages/context"
+    },
+    {
+      "path": "apps/runner"
+    },
+    {
+      "path": "packages/workspace"
+    },
+    {
+      "path": "apps/cli"
+    }
+  ]
+}

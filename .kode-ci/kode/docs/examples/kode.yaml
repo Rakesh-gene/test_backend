@@ -1,0 +1,53 @@
+# Executable P03 repository contract. Scripts must exist in the managed repo.
+# Place at a registered repository root as kode.yaml.
+version: 1
+dependencies:
+  manager: npm
+  reuse: auto
+  prepare: install
+commands:
+  install:
+    run: [npm, ci]
+    timeout_seconds: 300
+  build:
+    run: [npm, run, build]
+    timeout_seconds: 180
+  test:
+    run: [npm, test, --, --run]
+    timeout_seconds: 180
+  integration:
+    run: [npm, run, test:integration]
+    timeout_seconds: 180
+    services: [app]
+    env:
+      BASE_URL: http://127.0.0.1:${port:app}
+    reports:
+      - format: junit
+        path: test-results/integration.xml
+    artifacts: [test-results]
+  ui:
+    run: [npm, run, test:e2e]
+    timeout_seconds: 300
+    services: [app]
+    env:
+      BASE_URL: http://127.0.0.1:${port:app}
+    reports:
+      - format: junit
+        path: test-results/ui.xml
+    artifacts: [playwright-report, test-results]
+  serve:
+    run: [npm, run, dev, --, --host, 127.0.0.1]
+    env:
+      PORT: ${port:app}
+services:
+  app:
+    command: serve
+    port: auto
+    readiness:
+      http: http://127.0.0.1:${port:app}/health
+      timeout_seconds: 60
+
+# This example assumes package scripts emit the declared JUnit report paths
+# and the server honors PORT. Services receive an assigned loopback port;
+# inject the corresponding URL into the tests through their command env.
+# Kode's launcher resolves npm and its Windows shim through a platform adapter.

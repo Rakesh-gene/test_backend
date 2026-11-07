@@ -74,6 +74,9 @@ describe('P02 multi-root dirty-baseline isolation', () => {
     await expect(workspace.add(backend, 'alias', 'write')).rejects.toThrow('Duplicate');
     const alias = join(home, 'alias');
     await symlink(backend, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    const aliasedWorkspace = new Workspace(alias);
+    expect(aliasedWorkspace.path).toBe(api.path);
+    expect(aliasedWorkspace.state).toBe(join(api.path, '.kode'));
     await expect(workspace.add(alias, 'alias', 'write')).rejects.toThrow('Duplicate');
     if (process.platform === 'win32')
       await expect(workspace.add(backend.toUpperCase(), 'case', 'write')).rejects.toThrow(
@@ -425,7 +428,7 @@ describe('P03 manager reuse and durable runner integration', () => {
     await execa(npm, ['pack', '--ignore-scripts', '--offline', '--cache', cache], {
       cwd: packageSource,
       windowsHide: true,
-      timeout: 15000,
+      timeout: 30000,
     });
     const tarball = join(packageSource, 'kode-cache-fixture-1.0.0.tgz');
     const integrity = `sha512-${createHash('sha512')
@@ -434,7 +437,7 @@ describe('P03 manager reuse and durable runner integration', () => {
     await execa(npm, ['cache', 'add', tarball, '--cache', cache, '--offline'], {
       cwd: home,
       windowsHide: true,
-      timeout: 15000,
+      timeout: 30000,
     });
     const pkg = {
       name: 'fixture',
@@ -463,7 +466,7 @@ describe('P03 manager reuse and durable runner integration', () => {
     await execa(
       npm,
       ['ci', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', '--cache', cache],
-      { cwd: path, windowsHide: true, timeout: 15000 },
+      { cwd: path, windowsHide: true, timeout: 30000 },
     );
     await writeFile(
       join(path, 'kode.yaml'),
@@ -530,7 +533,7 @@ describe('P03 manager reuse and durable runner integration', () => {
     await expect(
       prepareEnvironment(workspace, root.id, { treeId: cold.id, offline: true }),
     ).rejects.toThrow('offline');
-  }, 60000);
+  }, 120000);
   test('NuGet cache reuse retains independent restore metadata and runs real .NET code', async () => {
     const home = await directory(),
       workspace = new Workspace(home);

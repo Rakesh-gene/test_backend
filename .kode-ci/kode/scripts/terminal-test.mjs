@@ -22,15 +22,24 @@ const terminal = spawn(
     cols: 110,
     rows: 35,
     cwd: process.cwd(),
-    env: { ...process.env, TERM: 'xterm-256color', FORCE_COLOR: '1' },
+    // This child is an actual interactive PTY even when its test driver is in CI.
+    env: {
+      ...process.env,
+      CI: 'false',
+      CONTINUOUS_INTEGRATION: 'false',
+      TERM: 'xterm-256color',
+      FORCE_COLOR: '1',
+    },
   },
 );
 terminal.onData((data) => {
   output += data;
 });
 let exited = false;
-terminal.onExit(() => {
+let exitDetails;
+terminal.onExit((details) => {
   exited = true;
+  exitDetails = details;
 });
 const waitFor = async (text) => {
   const deadline = Date.now() + 45000;
@@ -39,7 +48,7 @@ const waitFor = async (text) => {
   if (!safeTerminal(output).includes(text)) {
     await writeFile('.artifacts/terminal-failure.txt', output);
     throw new Error(
-      `Terminal did not display: ${text}. Last output: ${safeTerminal(output).slice(-1000)}`,
+      `Terminal did not display: ${text}. Exit: ${JSON.stringify(exitDetails)}. Last output: ${safeTerminal(output).slice(-1000)}`,
     );
   }
 };

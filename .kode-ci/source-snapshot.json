@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "50806edde1d90568bdfe8ba43f2b6a33bc52b5120f666568cd2bb3b0936c969d",
+  "sourceDigest": "e43220f5d6751268a43eaab429a8867bb1b7fab4cea33919fee65881c06db8e8",
   "entries": [
     {
       "path": ".github/workflows/ci.yml",
@@ -260,7 +260,7 @@
     },
     {
       "path": "packages/workspace/src/roots.ts",
-      "sha256": "53a32e9476a4a4d8b515de2721dccb2cc4508b40cd6f3980c3c1ae422b8cbae9"
+      "sha256": "d2c050a18c3332ada380e48d3690683b557d74e4995780e3346567fa48c23148"
     },
     {
       "path": "packages/workspace/src/services.ts",
@@ -332,7 +332,7 @@
     },
     {
       "path": "scripts/terminal-test.mjs",
-      "sha256": "1e63b99a04d1acc579b2e797a4a8a1c2f3d8d99214294c813b737b0abb8c6dbb"
+      "sha256": "4794ddec703e9c6c28b365e576c0d56a03d2752a08048d1b677f6e741715ef47"
     },
     {
       "path": "scripts/verify.mjs",
@@ -348,7 +348,7 @@
     },
     {
       "path": "tests/workspace.test.ts",
-      "sha256": "c4ec41c8c7abbef88aff092501c43c8ad7a910ee5dfdfe581bfae0da19c1fc7a"
+      "sha256": "fba275643802db905ea94367a8cba5fb3d65442afbdbd0a2da95dd933bf2347d"
     },
     {
       "path": "tsconfig.base.json",

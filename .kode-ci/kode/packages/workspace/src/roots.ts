@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import {
   chmod,
   lstat,
@@ -128,7 +129,10 @@ async function requiredGit(cwd: string, args: string[]) {
 export class Workspace {
   readonly state: string;
   constructor(readonly path: string) {
-    this.state = join(path, '.kode');
+    // macOS temp directories commonly arrive through /var -> /private/var.
+    // Persist one canonical spelling before constructing owned task paths.
+    this.path = realpathSync(path);
+    this.state = join(this.path, '.kode');
   }
   async init() {
     const canonical = await realpath(this.path);

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "ca7e509fdc7090c21f24edba0a6fff164562ed6c85364e8e883e6f098d5061b9",
+  "sourceDigest": "bdd7eb7f472e6a4971d1bae3aa3300dbcada09bbf9e94f4367bd7f0f866d9e66",
   "entries": [
     {
       "path": ".github/workflows/ci.yml",
@@ -260,7 +260,7 @@
     },
     {
       "path": "packages/workspace/src/roots.ts",
-      "sha256": "d2c050a18c3332ada380e48d3690683b557d74e4995780e3346567fa48c23148"
+      "sha256": "21dcf834d729a0debe802cccafe3e39a81467997f2c6fee17f33cc13837dcdf2"
     },
     {
       "path": "packages/workspace/src/services.ts",

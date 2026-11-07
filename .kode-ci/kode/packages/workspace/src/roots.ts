@@ -129,9 +129,9 @@ async function requiredGit(cwd: string, args: string[]) {
 export class Workspace {
   readonly state: string;
   constructor(readonly path: string) {
-    // macOS temp directories commonly arrive through /var -> /private/var.
-    // Persist one canonical spelling before constructing owned task paths.
-    this.path = realpathSync(path);
+    // Resolve macOS /var aliases and Windows 8.3 names through the same native
+    // filesystem semantics as async realpath before constructing owned paths.
+    this.path = realpathSync.native(path);
     this.state = join(this.path, '.kode');
   }
   async init() {

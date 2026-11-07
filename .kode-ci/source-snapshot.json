@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "b31286d5577c110dc62d738ddaa7bc67bf10985e0bea42cf9157bc72b65722b8",
+  "sourceDigest": "ca7e509fdc7090c21f24edba0a6fff164562ed6c85364e8e883e6f098d5061b9",
   "entries": [
     {
       "path": ".github/workflows/ci.yml",
@@ -348,7 +348,7 @@
     },
     {
       "path": "tests/workspace.test.ts",
-      "sha256": "3ca8958a57e74e881901db129c721b535ad1311f9dad7f0beae6d3a0d9aabade"
+      "sha256": "c6b881a4116a4fde0234117e3162da7d1624993a1a38d7e0587f1b3c83ae72c5"
     },
     {
       "path": "tsconfig.base.json",

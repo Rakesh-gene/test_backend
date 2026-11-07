@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, test } from 'vitest';
-import { mkdtemp, mkdir, readFile, writeFile, rm, symlink, readdir, chmod } from 'node:fs/promises';
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  writeFile,
+  rm,
+  symlink,
+  readdir,
+  chmod,
+  realpath,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'node:net';
@@ -37,7 +47,7 @@ async function evidence(name: string, value: unknown) {
 const git = (cwd: string, args: string[]) =>
   execa('git', ['-C', cwd, ...args], { windowsHide: true });
 async function directory() {
-  const path = await mkdtemp(join(tmpdir(), 'kode-workspace-'));
+  const path = await realpath(await mkdtemp(join(tmpdir(), 'kode-workspace-')));
   directories.push(path);
   return path;
 }

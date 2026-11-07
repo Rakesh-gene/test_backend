@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "e43220f5d6751268a43eaab429a8867bb1b7fab4cea33919fee65881c06db8e8",
+  "sourceDigest": "b31286d5577c110dc62d738ddaa7bc67bf10985e0bea42cf9157bc72b65722b8",
   "entries": [
     {
       "path": ".github/workflows/ci.yml",
@@ -248,7 +248,7 @@
     },
     {
       "path": "packages/workspace/src/environment.ts",
-      "sha256": "b9c52654865c206716353967b5969534675b71e8d4dee50d597d6b48e757de23"
+      "sha256": "27a90b15e8a1a73fe221a45e820917f7dae04625305aa76c49abe4753262a2fa"
     },
     {
       "path": "packages/workspace/src/index.ts",
@@ -316,7 +316,7 @@
     },
     {
       "path": "scripts/repository-acceptance.mjs",
-      "sha256": "9f80543569452201fd0d606eff6a5d1933a15fa5f70b4e9d713802fd68de5392"
+      "sha256": "fab2584af680e2bf969888a1dc52edce25bc0c8984e2207b1b4512fd8da25c95"
     },
     {
       "path": "scripts/setup-xerj.mjs",
@@ -348,7 +348,7 @@
     },
     {
       "path": "tests/workspace.test.ts",
-      "sha256": "fba275643802db905ea94367a8cba5fb3d65442afbdbd0a2da95dd933bf2347d"
+      "sha256": "3ca8958a57e74e881901db129c721b535ad1311f9dad7f0beae6d3a0d9aabade"
     },
     {
       "path": "tsconfig.base.json",

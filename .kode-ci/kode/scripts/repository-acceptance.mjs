@@ -345,7 +345,7 @@ try {
   assert.equal(listed.status, 200);
   assert.ok(listed.body.items.some((item) => item.id === created.body.id));
   report.assertions.push(
-    'Frontend proxy reaches the real SQLite-backed API',
+    `Frontend proxy reaches the real ${postgres ? 'PostgreSQL' : 'SQLite'}-backed API`,
     'Registration returns 201 and excludes credentials',
     'Duplicate email returns 409',
     'Invalid registration returns 400',

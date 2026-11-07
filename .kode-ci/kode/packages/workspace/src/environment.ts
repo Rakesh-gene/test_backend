@@ -232,19 +232,21 @@ export async function prepareEnvironment(
     manifest.dependencies.manager === 'none'
       ? {}
       : await identity(manifest.dependencies.manager, target);
-  const fingerprint = hash(
-    JSON.stringify({
-      metadata,
-      runtime,
-      policy: manifest.dependencies,
-      prepare: manifest.dependencies.prepare
-        ? manifest.commands[manifest.dependencies.prepare]
-        : null,
-      validate: manifest.dependencies.validate
-        ? manifest.commands[manifest.dependencies.validate]
-        : null,
-    }),
-  );
+  const fingerprintFor = (runtimeIdentity: typeof runtime) =>
+    hash(
+      JSON.stringify({
+        metadata,
+        runtime: runtimeIdentity,
+        policy: manifest.dependencies,
+        prepare: manifest.dependencies.prepare
+          ? manifest.commands[manifest.dependencies.prepare]
+          : null,
+        validate: manifest.dependencies.validate
+          ? manifest.commands[manifest.dependencies.validate]
+          : null,
+      }),
+    );
+  const fingerprint = fingerprintFor(runtime);
   const receiptPath = join(workspace.state, 'environments', `${hash(target)}.json`);
   const observe = options.observe ?? quiet;
   const perform = async () => {
@@ -384,6 +386,10 @@ export async function prepareEnvironment(
           throw new Error(
             'Dependency inputs changed during preparation; environment is not ready.',
           );
+        // Package managers may bootstrap their user configuration on first restore.
+        // Bind the successful receipt to the configuration that actually exists
+        // afterward, rather than forcing an identical second restore on a fresh host.
+        receipt.fingerprint = fingerprintFor(await identity(manifest.dependencies.manager, target));
         receipt.state = 'ready';
       } catch (error) {
         receipt.state = 'failed';
@@ -396,7 +402,7 @@ export async function prepareEnvironment(
       phase: 'environment',
       name: root.name,
       status: 'ready',
-      fingerprint,
+      fingerprint: receipt.fingerprint,
       source: receipt.source,
       reason,
     });

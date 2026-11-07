@@ -607,6 +607,10 @@ describe('P03 manager reuse and durable runner integration', () => {
     expect(
       (await prepareEnvironment(workspace, root.id, { treeId: tree.id, offline: true })).state,
     ).toBe('ready');
+    expect(
+      (await prepareEnvironment(workspace, root.id, { treeId: tree.id, offline: true }))
+        .installInvocations,
+    ).toBe(0);
     const sourceAssets = JSON.parse(
       await readFile(join(path, 'obj', 'project.assets.json'), 'utf8'),
     );

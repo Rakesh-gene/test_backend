@@ -90,16 +90,38 @@ try {
       const descriptor = JSON.parse(
         await readFile(join(paths.control, 'containers', owned[0]), 'utf8'),
       );
+      const inspected = JSON.parse(
+        (
+          await execa(
+            'docker',
+            ['--host', descriptor.endpoint, 'inspect', descriptor.id, '--format', '{{json .}}'],
+            { windowsHide: true },
+          )
+        ).stdout,
+      );
+      assert.equal(inspected.HostConfig.NetworkMode, 'none');
+      assert.equal(inspected.HostConfig.ReadonlyRootfs, true);
+      assert.equal(inspected.Config.StdinOnce, true);
+      assert.deepEqual(inspected.HostConfig.CapDrop, ['ALL']);
+      assert.ok(inspected.HostConfig.SecurityOpt.includes('no-new-privileges'));
+      assert.deepEqual(
+        inspected.Mounts.filter((mount) => mount.Type === 'bind').map((mount) => mount.Destination),
+        ['/workspace'],
+      );
       const owner = JSON.parse(await readFile(paths.lease, 'utf8'));
       process.kill(owner.pid, 'SIGKILL');
       client.close();
       // Check automatic EOF/namespace teardown before starting recovery.
       await wait(
         async () => {
-          const check = await execa('docker', ['inspect', descriptor.id], {
-            reject: false,
-            windowsHide: true,
-          });
+          const check = await execa(
+            'docker',
+            ['--host', descriptor.endpoint, 'inspect', descriptor.id],
+            {
+              reject: false,
+              windowsHide: true,
+            },
+          );
           return check.exitCode !== 0;
         },
         Boolean,

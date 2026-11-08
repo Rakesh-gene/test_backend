@@ -14,6 +14,7 @@ export const ExecutionPolicy = z.discriminatedUnion('mode', [
       mode: z.literal('container'),
       image: z.string().regex(/^sha256:[a-f0-9]{64}$/),
       reference: z.string().max(300),
+      endpoint: z.string().regex(/^(unix:\/\/\/|npipe:\/\/)/),
     })
     .strict(),
 ]);
@@ -33,31 +34,46 @@ export async function executionPolicy(state: string): Promise<Execution> {
     }),
   );
 }
-async function docker() {
+async function docker(selected?: string) {
   const executable = findExecutable('docker');
   if (!executable) throw new Error('Container isolation requires Docker. No native fallback.');
   const endpoint =
-    process.env.DOCKER_HOST ??
+    selected ??
+    (!process.env.DOCKER_CONTEXT ? process.env.DOCKER_HOST : undefined) ??
     (
-      await execa(executable, ['context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'], {
-        windowsHide: true,
-        timeout: 10000,
-      })
+      await execa(
+        executable,
+        [
+          'context',
+          'inspect',
+          ...(process.env.DOCKER_CONTEXT ? [process.env.DOCKER_CONTEXT] : []),
+          '--format',
+          '{{.Endpoints.docker.Host}}',
+        ],
+        {
+          windowsHide: true,
+          timeout: 10000,
+        },
+      )
     ).stdout.trim();
   if (!/^(unix:\/\/\/|npipe:\/\/)/.test(endpoint))
     throw new Error('Strict bind mounts require a local Docker endpoint. No native fallback.');
-  return executable;
+  return { executable, endpoint };
 }
 export async function configureExecution(state: string, image?: string): Promise<Execution> {
   let policy: Execution = { mode: 'native' };
   if (image) {
     if (image.startsWith('-') || image.length > 300) throw new Error('Invalid image reference.');
     const tool = await docker();
-    const result = await execa(tool, ['image', 'inspect', image, '--format', '{{json .}}'], {
-      windowsHide: true,
-      timeout: 15000,
-      maxBuffer: 1024 * 1024,
-    });
+    const result = await execa(
+      tool.executable,
+      ['--host', tool.endpoint, 'image', 'inspect', image, '--format', '{{json .}}'],
+      {
+        windowsHide: true,
+        timeout: 15000,
+        maxBuffer: 1024 * 1024,
+      },
+    );
     const inspected = JSON.parse(result.stdout) as {
       Id: string;
       Os: string;
@@ -65,7 +81,12 @@ export async function configureExecution(state: string, image?: string): Promise
     };
     if (inspected.Os !== 'linux' || Object.keys(inspected.Config?.Volumes ?? {}).length)
       throw new Error('Use a local Linux image without declared anonymous volumes.');
-    policy = ExecutionPolicy.parse({ mode: 'container', image: inspected.Id, reference: image });
+    policy = ExecutionPolicy.parse({
+      mode: 'container',
+      image: inspected.Id,
+      reference: image,
+      endpoint: tool.endpoint,
+    });
   }
   await mkdir(join(state, 'control'), { recursive: true, mode: 0o700 });
   await atomicJson(policyFile(state), policy);
@@ -80,13 +101,24 @@ const Descriptor = z
       .optional(),
     owner: z.string().uuid(),
     image: z.string(),
+    endpoint: z.string().regex(/^(unix:\/\/\/|npipe:\/\/)/),
     workspace: z.string(),
   })
   .strict();
-async function removeOwned(tool: string, descriptor: z.infer<typeof Descriptor>) {
+async function removeOwned(
+  tool: Awaited<ReturnType<typeof docker>>,
+  descriptor: z.infer<typeof Descriptor>,
+) {
   const result = await execa(
-    tool,
-    ['inspect', descriptor.id ?? `kode-${descriptor.owner}`, '--format', '{{json .}}'],
+    tool.executable,
+    [
+      '--host',
+      tool.endpoint,
+      'inspect',
+      descriptor.id ?? `kode-${descriptor.owner}`,
+      '--format',
+      '{{json .}}',
+    ],
     { reject: false, windowsHide: true, timeout: 10000, maxBuffer: 1024 * 1024 },
   );
   if (result.exitCode !== 0) {
@@ -105,11 +137,15 @@ async function removeOwned(tool: string, descriptor: z.infer<typeof Descriptor>)
     actual.Config.Labels['kode.workspace'] !== descriptor.workspace
   )
     throw new Error('Container ownership mismatch; no container was removed.');
-  const removed = await execa(tool, ['rm', '--force', actual.Id], {
-    reject: false,
-    windowsHide: true,
-    timeout: 10000,
-  });
+  const removed = await execa(
+    tool.executable,
+    ['--host', tool.endpoint, 'rm', '--force', actual.Id],
+    {
+      reject: false,
+      windowsHide: true,
+      timeout: 10000,
+    },
+  );
   if (removed.exitCode !== 0 && !/No such (object|container)/i.test(removed.stderr))
     throw new Error('Owned container teardown failed; its descriptor is retained.');
 }
@@ -120,14 +156,13 @@ export async function recoverContainers(state: string) {
     throw error;
   });
   if (!files.length) return;
-  const tool = await docker();
   for (const file of files) {
     if (!/^[a-f0-9-]{36}\.json$/.test(file)) continue;
     const path = join(directory, file),
       descriptor = Descriptor.parse(await json(path));
     if (descriptor.owner + '.json' !== file || descriptor.workspace !== hash(await realpath(state)))
       throw new Error('Container recovery descriptor is outside this workspace.');
-    await removeOwned(tool, descriptor);
+    await removeOwned(await docker(descriptor.endpoint), descriptor);
     await unlink(path);
   }
 }
@@ -147,7 +182,7 @@ export async function containerCommand(
     canonical.includes(',')
   )
     throw new Error('Container mount must be the selected isolated task tree (without commas).');
-  const tool = await docker(),
+  const tool = await docker(selected.policy.endpoint),
     owner = randomUUID();
   const workspace = hash(await realpath(join(selected.control, '..')));
   const directory = join(selected.control, 'containers');
@@ -179,10 +214,17 @@ exit "$result"
     DOTNET_CLI_HOME: '/tmp/kode-home',
     ...env,
   };
-  await atomicJson(file, { owner, image: selected.policy.image, workspace });
+  await atomicJson(file, {
+    owner,
+    image: selected.policy.image,
+    workspace,
+    endpoint: tool.endpoint,
+  });
   const create = await execa(
-    tool,
+    tool.executable,
     [
+      '--host',
+      tool.endpoint,
       'create',
       '--pull',
       'never',
@@ -245,6 +287,7 @@ exit "$result"
     owner,
     image: selected.policy.image,
     workspace,
+    endpoint: tool.endpoint,
   });
   try {
     await atomicJson(file, descriptor);
@@ -253,8 +296,8 @@ exit "$result"
     throw error;
   }
   return {
-    executable: tool,
-    args: ['start', '--attach', '--interactive', descriptor.id!],
+    executable: tool.executable,
+    args: ['--host', tool.endpoint, 'start', '--attach', '--interactive', descriptor.id!],
     async cleanup() {
       await removeOwned(tool, descriptor);
       await unlink(file).catch(() => {});

@@ -33,7 +33,7 @@ export async function providerInventory() {
 }
 
 export class CodexConnection {
-  private ownership = windowsOwnership();
+  private ownership: ReturnType<typeof windowsOwnership>;
   private child: ChildProcessWithoutNullStreams;
   private next = 0;
   private buffer = '';
@@ -48,6 +48,7 @@ export class CodexConnection {
   onDisconnect?: () => void;
   constructor(executable = findExecutable('codex'), args = ['app-server']) {
     if (!executable) throw new Error('Codex CLI not installed.');
+    this.ownership = windowsOwnership();
     this.child = spawn(
       this.ownership ? process.execPath : executable,
       this.ownership ? [commandHost, executable, ...args] : args,

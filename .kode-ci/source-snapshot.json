@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "bac403b2c71dfe135eaa6bc416b41859efa4e0413e8be975b95dadaff56a27d8",
+  "sourceDigest": "3652b12d7037673695631454c3567e97cf87cc0df250c1323f5ff2abf369fd4b",
   "entries": [
     {
       "path": ".github/workflows/ci.yml",
@@ -52,7 +52,7 @@
     },
     {
       "path": "apps/runner/src/agents.ts",
-      "sha256": "69b913d4f78378c740189db20f6b934a1a2b93b45e31ac46b0693e222debd2fa"
+      "sha256": "7a81b46be87d1e56bd1dcb0dd6217ae1e86625d8d10e97202da9b2a517215d98"
     },
     {
       "path": "apps/runner/src/approvals.ts",
@@ -72,7 +72,7 @@
     },
     {
       "path": "apps/runner/src/workspace.ts",
-      "sha256": "d794f24053eac3d25ca2ad0e3644486398156beb5b6c3174df1685055bf35d2e"
+      "sha256": "133229bf971b7978d295787266501a647526402e21257480b658690b74a534a6"
     },
     {
       "path": "apps/runner/tsconfig.json",
@@ -120,11 +120,11 @@
     },
     {
       "path": "docs/gap-reports/GAP-006.md",
-      "sha256": "32aabfecfe450afd03edc2a1dc85dfffcc2543c6553f1b200e02f2beee406e21"
+      "sha256": "a9f1a22ab88d0a22bf5a67366b50b935d0338e5e87dbc0bb8215c2ed73edba5d"
     },
     {
       "path": "docs/gap-reports/GAP-007.md",
-      "sha256": "ee19763865a94884b25cf0a20a80975d052b2600e91f88cdcd432a4ec4b24fb9"
+      "sha256": "37daae67725668f50bdde6256098ad87c578f63d31d22751ef6c5417467f4da7"
     },
     {
       "path": "docs/gap-reports/GAP-008.md",
@@ -224,7 +224,7 @@
     },
     {
       "path": "packages/execution/src/ownership.ts",
-      "sha256": "4b657a6dbd5ed4d1fe216457b365a3af66fdd3480283a78aad203ca965030b64"
+      "sha256": "809a16f3a8b779428b05d28c3cbefaa1efb724d854d1d38bfaa1b96c4f4ef833"
     },
     {
       "path": "packages/execution/tsconfig.json",
@@ -256,7 +256,7 @@
     },
     {
       "path": "packages/providers/src/index.ts",
-      "sha256": "8028a048bae5cf80f6f41d5f9b784f7780d6f6b48444349d7fd810cf549e7a90"
+      "sha256": "479677ab6171a0b593bf923907c901e62250c4ca12b2d1954a5746631eafa05e"
     },
     {
       "path": "packages/providers/tsconfig.json",
@@ -268,11 +268,11 @@
     },
     {
       "path": "packages/storage/src/index.ts",
-      "sha256": "6f2a552b3c9c9c6355f3f92292cd312001ad750c4ae717860a8ad0c02f3456c8"
+      "sha256": "b5dca28b3924cc091d734df6dad8061f3b6b6e8ae9c517c9d5d02f6abe7e0051"
     },
     {
       "path": "packages/storage/src/worker.ts",
-      "sha256": "b0b4a4aac38089977605a71725027e0f0961abda3c61d31f2a7d55bb8b3869cf"
+      "sha256": "f91244c82591978d6c8764baff283a7a9d2cdb86361d2d91138b45feda7d56b3"
     },
     {
       "path": "packages/storage/tsconfig.json",
@@ -284,7 +284,7 @@
     },
     {
       "path": "packages/workspace/src/environment.ts",
-      "sha256": "8f782b2d7d6b6a0d1571b65ade5bb2933cb73191329121fb7ce271f06891ff9b"
+      "sha256": "5f96713c8fc478a2afadbd466bf4aa0203a598375483f3a8ab28f810860ce601"
     },
     {
       "path": "packages/workspace/src/index.ts",
@@ -292,7 +292,7 @@
     },
     {
       "path": "packages/workspace/src/isolation.ts",
-      "sha256": "9af49ec2d4019173b6bbda8ded1276d793116a82f79ec43bb94e7b44588c7ff8"
+      "sha256": "63ad189566882dfe9f51bd38bc9e6533a9530152067a257b972c4db2de55f63d"
     },
     {
       "path": "packages/workspace/src/project.ts",
@@ -356,7 +356,7 @@
     },
     {
       "path": "scripts/qualify-containment.mjs",
-      "sha256": "95321f4c6b396dfa6d2dad1f3ea46771621a522ec67e1423cca67875818687a9"
+      "sha256": "d174afe3e6d3ff95c5487acad474c338b8c34dbebb45dd9fa04789c3ca0414bf"
     },
     {
       "path": "scripts/qualify-native-approvals.mjs",
@@ -400,7 +400,7 @@
     },
     {
       "path": "tests/agents.test.ts",
-      "sha256": "cde09168d397d0eade110f255d7e5c8e51ecd5d145b6ec6e61298d6cad894147"
+      "sha256": "d103a5e3f4257e00469e30be5a318e406870c582f24a39fdc08d968151f97547"
     },
     {
       "path": "tests/approval-broker.test.ts",
@@ -416,7 +416,7 @@
     },
     {
       "path": "tests/isolation.test.ts",
-      "sha256": "6758d4258c2c61854d23968f14cc3ca5528b73161ae31f0e00bd452f6560a2bc"
+      "sha256": "752a6e1b2a6f2c3a2790e30a4dd54c4fb82e6349559d751ade3f41bd02eeac72"
     },
     {
       "path": "tests/observability-recovery.test.ts",
@@ -448,7 +448,7 @@
     },
     {
       "path": "vitest.config.ts",
-      "sha256": "1630769e47941b438240ad4783a2dd1ee59417979882630a81e7672b98dd9bca"
+      "sha256": "e762f30d5eccfe88123298c1d212d778b13af66a7d2bb210c30e5c932b8d0676"
     }
   ],
   "backend": "6412c17fa2d4d73f435cb14c92fe14f46bd28f06",

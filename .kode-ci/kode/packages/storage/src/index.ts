@@ -8,6 +8,7 @@ export class Store {
   private worker: Worker;
   private next = 0;
   private available = true;
+  private exited: Promise<void>;
   private pending = new Map<
     number,
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
@@ -18,6 +19,7 @@ export class Store {
       workerData: { path, ...options },
       execArgv: process.execArgv.filter((arg) => !arg.startsWith('--input-type')),
     });
+    this.exited = new Promise((resolve) => this.worker.once('exit', () => resolve()));
     this.ready = new Promise((resolve, reject) => {
       this.worker.on('message', (message) => {
         if (message.ready) {
@@ -25,8 +27,8 @@ export class Store {
           return;
         }
         if (message.startupError) {
+          this.available = false;
           reject(new Error(message.startupError));
-          void this.worker.terminate();
           return;
         }
         const pending = this.pending.get(message.id);
@@ -76,7 +78,19 @@ export class Store {
       await this.call('close');
     } finally {
       this.available = false;
-      await this.worker.terminate();
+      let timer: NodeJS.Timeout | undefined;
+      try {
+        await Promise.race([
+          this.exited,
+          new Promise<void>((resolve) => {
+            timer = setTimeout(() => {
+              void this.worker.terminate().then(() => resolve());
+            }, 3000);
+          }),
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
     }
   }
   async terminate() {

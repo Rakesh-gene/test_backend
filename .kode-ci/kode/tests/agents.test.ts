@@ -55,7 +55,9 @@ test('adapter validates native profile/model, relays structured answers and file
               const native =
                 current === 'question'
                   ? 'item/tool/requestUserInput'
-                  : 'item/fileChange/requestApproval';
+                  : current === 'permissions'
+                    ? 'item/permissions/requestApproval'
+                    : 'item/fileChange/requestApproval';
               const detail =
                 current === 'question'
                   ? {
@@ -69,10 +71,12 @@ test('adapter validates native profile/model, relays structured answers and file
                         },
                       ],
                     }
-                  : {
-                      reason: 'A proposed patch',
-                      availableDecisions: ['accept', 'decline', 'cancel'],
-                    };
+                  : current === 'permissions'
+                    ? { permissions: { fileSystem: { read: [join(workspace.state, 'control')] } } }
+                    : {
+                        reason: 'A proposed patch',
+                        availableDecisions: ['accept', 'decline', 'cancel'],
+                      };
               connection.onNotification?.('item/started', {
                 threadId: 'thread',
                 item: {
@@ -115,7 +119,7 @@ test('adapter validates native profile/model, relays structured answers and file
   };
   const agents = new Agents(workspace, store, otel, create);
   const wait = async (condition: () => Promise<boolean>) => {
-    for (let n = 0; n < 200; n++) {
+    for (let n = 0; n < 1000; n++) {
       if (await condition()) return;
       await new Promise((r) => setTimeout(r, 10));
     }
@@ -125,7 +129,7 @@ test('adapter validates native profile/model, relays structured answers and file
     await expect(
       agents.start({ root: 'repo', prompt: 'scope', sandbox: 'workspace-write' }),
     ).rejects.toThrow('isolated writable');
-    for (mode of ['question', 'file']) {
+    for (mode of ['question', 'file', 'permissions']) {
       const task = await agents.start({
         root: 'repo',
         prompt: 'fixture',
@@ -136,6 +140,12 @@ test('adapter validates native profile/model, relays structured answers and file
         (await agents.broker.list()).some((r) => r.taskId === task.id && r.state === 'pending'),
       );
       const record = (await agents.broker.list()).find((r) => r.taskId === task.id)!;
+      if (mode !== 'question') {
+        expect(record.choices).not.toContain('accept');
+        await expect(
+          agents.broker.decide(record.id, record.version, record.fingerprint, 'accept'),
+        ).rejects.toThrow('not supported');
+      }
       if (mode === 'question') {
         await expect(
           agents.broker.decide(record.id, record.version, record.fingerprint, 'answer', {
@@ -157,13 +167,24 @@ test('adapter validates native profile/model, relays structured answers and file
       expect(final.outcome).toBe(mode === 'question' ? 'completed' : 'declined');
       expect(JSON.stringify(final)).not.toContain('"answers":');
     }
-    expect(received).toEqual([{ answers: { q: { answers: ['One'] } } }, { decision: 'decline' }]);
+    expect(received).toEqual([
+      { answers: { q: { answers: ['One'] } } },
+      { decision: 'decline' },
+      { permissions: {}, scope: 'turn' },
+    ]);
     const rejected = await agents.start({
       root: 'repo',
       prompt: 'fixture',
       reasoning: 'unsupported',
     });
-    await wait(async () => (await agents.get(rejected.id)).status === 'blocked');
+    await wait(async () => (await agents.get(rejected.id)).status === 'blocked').catch(
+      async (error) => {
+        throw new Error(
+          `Rejected model assignment: ${JSON.stringify(await agents.get(rejected.id))}`,
+          { cause: error },
+        );
+      },
+    );
     expect((await agents.get(rejected.id)).error).toContain('reasoning');
   } finally {
     await agents.stop();

@@ -36,7 +36,12 @@ test('strict execution rejects remote/unavailable engines without a native fallb
         {
           root: repo,
           control,
-          policy: { mode: 'container', image: `sha256:${'0'.repeat(64)}`, reference: 'fixture' },
+          policy: {
+            mode: 'container',
+            image: `sha256:${'0'.repeat(64)}`,
+            reference: 'fixture',
+            endpoint: 'tcp://remote.invalid:2375',
+          },
         },
         () => runDeclared(repo, manifest, 'dangerous'),
       ),
@@ -77,6 +82,7 @@ test('runner requires isolated trees for strict commands and rejects native envi
         mode: 'container',
         image: `sha256:${'0'.repeat(64)}`,
         reference: 'fixture',
+        endpoint: 'unix:///var/run/docker.sock',
       }),
     );
     await expect(

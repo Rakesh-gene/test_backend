@@ -1,11 +1,8 @@
-import koffi from 'koffi';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
-/** A non-inheritable handle: runner death closes the last handle and kills the job. */
-export function windowsOwnership() {
-  if (process.platform !== 'win32') return undefined;
-  if (!['x64', 'arm64'].includes(process.arch))
-    throw new Error('Process ownership requires a supported 64-bit Windows runtime.');
+function bindWindows() {
+  const koffi = createRequire(import.meta.url)('koffi') as typeof import('koffi');
   const kernel = koffi.load('kernel32.dll');
   const create = kernel.func('void * __stdcall CreateJobObjectW(void *, void *)');
   const configure = kernel.func(
@@ -15,6 +12,17 @@ export function windowsOwnership() {
   const assign = kernel.func('int __stdcall AssignProcessToJobObject(void *, void *)');
   const terminate = kernel.func('int __stdcall TerminateJobObject(void *, uint32_t)');
   const close = kernel.func('int __stdcall CloseHandle(void *)');
+  return { kernel, create, configure, open, assign, terminate, close };
+}
+// Keep both the library and marshalled function definitions alive for the entire
+// process; jobs must not create disposable FFI definitions for system DLL exports.
+let bindings: ReturnType<typeof bindWindows> | undefined;
+/** A non-inheritable handle: runner death closes the last handle and kills the job. */
+export function windowsOwnership() {
+  if (process.platform !== 'win32') return undefined;
+  if (!['x64', 'arm64'].includes(process.arch))
+    throw new Error('Process ownership requires a supported 64-bit Windows runtime.');
+  const { create, configure, open, assign, terminate, close } = (bindings ??= bindWindows());
   const job: unknown = create(null, null);
   if (!job) throw new Error('Cannot create owned Windows process job. No command dispatched.');
   const limits = Buffer.alloc(144);

@@ -13,6 +13,7 @@ import {
   runDeclared,
 } from './project.js';
 import { atomicJson, hash, inside, json, leased, scoped } from './state.js';
+import { currentExecution } from './isolation.js';
 
 export interface EnvironmentReceipt {
   version: 1;
@@ -109,12 +110,14 @@ async function identity(manager: string, cwd: string, manifest: Manifest) {
     timeout: 15000,
   });
   if (result.exitCode !== 0) throw new Error(`Cannot determine ${tool} version.`);
-  const userConfig =
+  const userConfig = resolve(
+    cwd,
     manager === 'npm'
       ? (env.NPM_CONFIG_USERCONFIG ??
-        env.npm_config_userconfig ??
-        join(env.USERPROFILE ?? env.HOME ?? '', '.npmrc'))
-      : join(env.APPDATA ?? join(env.HOME ?? '', '.nuget'), 'NuGet', 'NuGet.Config');
+          env.npm_config_userconfig ??
+          join(env.USERPROFILE ?? env.HOME ?? '', '.npmrc'))
+      : join(env.APPDATA ?? join(env.HOME ?? '', '.nuget'), 'NuGet', 'NuGet.Config'),
+  );
   const configs: Record<string, string> = {};
   configs[userConfig] = await readFile(userConfig).then(hash, () => 'absent');
   if (manager === 'npm') {
@@ -339,6 +342,8 @@ export async function prepareEnvironment(
     observe?: Observer;
   } = {},
 ) {
+  if (currentExecution()?.policy.mode === 'container')
+    throw new Error('Native environment receipts cannot validate container dependencies.');
   const root = await workspace.root(rootId);
   const tree: TaskTree | undefined = options.treeId
     ? await workspace.tree(options.treeId)

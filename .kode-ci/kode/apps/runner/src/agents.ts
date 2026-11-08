@@ -110,7 +110,15 @@ export class Agents {
       traceContext: captureTraceContext(),
     };
     await atomicJson(this.file(record.id), record);
-    const connection = this.connect();
+    let connection: CodexConnection;
+    try {
+      connection = this.connect();
+    } catch (error) {
+      record.status = 'blocked';
+      record.error = String(redact(String(error), this.secrets)).slice(0, 2000);
+      await atomicJson(this.file(record.id), record);
+      throw new Error(`Agent ${record.id} blocked: ${record.error}`, { cause: error });
+    }
     let finish!: () => void,
       complete = false,
       cancelled = false;
@@ -216,6 +224,16 @@ export class Agents {
             : (['accept', 'decline', 'cancel'].filter((choice) => decisions.includes(choice)) as (
                 'accept' | 'decline' | 'cancel'
               )[]);
+        const grant = (permissions ? params.permissions : params.additionalPermissions) as
+          { fileSystem?: unknown; filesystem?: unknown } | undefined;
+        const expandsFilesystem = Boolean(grant?.fileSystem || grant?.filesystem);
+        const policyDenied =
+          expandsFilesystem ||
+          (file && (p.sandbox !== 'workspace-write' || Boolean(params.grantRoot)));
+        if (policyDenied) {
+          const accept = choices.indexOf('accept');
+          if (accept >= 0) choices.splice(accept, 1);
+        }
         return this.broker.request(
           {
             taskId: record.id,
@@ -240,7 +258,10 @@ export class Agents {
               ),
             ).slice(0, 4096),
             cwd: String(params.cwd ?? record.cwd),
-            reason: String(redact(String(params.reason ?? ''), this.secrets)).slice(0, 2048),
+            reason:
+              (policyDenied
+                ? 'Filesystem expansion is outside the assignment policy; start a newly scoped assignment. '
+                : '') + String(redact(String(params.reason ?? ''), this.secrets)).slice(0, 1900),
             details,
             choices,
             deadline:
@@ -478,8 +499,15 @@ export class Agents {
       }),
     );
     this.active.set(record.id, { connection, done, cancel });
-    void done.catch(() => {
-      this.otel.log('agent.persistence.failed', { agentId: record.id });
+    void done.catch(async (error) => {
+      record.status = 'blocked';
+      record.error = String(redact(String(error), this.secrets)).slice(0, 2000);
+      this.active.delete(record.id);
+      try {
+        await atomicJson(this.file(record.id), record);
+      } catch {
+        this.otel.log('agent.persistence.failed', { agentId: record.id });
+      }
     });
     return { id: record.id, status: record.status };
   }

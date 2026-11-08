@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import { EventInput, NativeApproval, type NativeApprovalRecord } from '@kode/contracts';
 import { randomUUID } from 'node:crypto';
 
-let db: Database.Database;
+let db!: Database.Database;
 try {
   db = new Database(workerData.path as string);
   const version = db.pragma('user_version', { simple: true }) as number;
@@ -25,7 +25,9 @@ try {
   db.pragma('busy_timeout = 3000');
   parentPort!.postMessage({ ready: true });
 } catch (error) {
+  if (db?.open) db.close();
   parentPort!.postMessage({ startupError: String(error) });
+  parentPort!.close();
 }
 
 parentPort!.on(
@@ -33,6 +35,7 @@ parentPort!.on(
   (message: { id: number; method: string; data: Record<string, unknown> }) => {
     try {
       let result: unknown;
+      let closing = false;
       switch (message.method) {
         case 'native.get': {
           const row = db
@@ -200,12 +203,14 @@ parentPort!.on(
           break;
         case 'close':
           db.close();
+          closing = true;
           result = true;
           break;
         default:
           throw new Error('Unknown storage operation.');
       }
       parentPort!.postMessage({ id: message.id, result });
+      if (closing) parentPort!.close();
     } catch (error) {
       parentPort!.postMessage({ id: message.id, error: String(error) });
     }

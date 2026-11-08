@@ -315,8 +315,11 @@ export function workspaceMethods(
         }
         case 'job.get': {
           const p = z.object({ id: z.string().uuid() }).strict().parse(params);
+          // Capture attachment before I/O. Completion can publish a new descriptor
+          // and detach while this read is returning the previous running snapshot.
+          const attached = active.has(p.id);
           const job = await json<Job>(join(workspace.state, 'jobs', `${p.id}.json`));
-          if (job.status === 'running' && !active.has(p.id))
+          if (job.status === 'running' && !attached)
             return {
               ...job,
               status: 'blocked',

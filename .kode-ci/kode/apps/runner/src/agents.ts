@@ -487,7 +487,7 @@ export class Agents {
             clearTimeout(timer);
           }
         } catch (error) {
-          record.status = 'blocked';
+          record.status = cancelled ? 'cancelled' : 'blocked';
           record.error = String(redact(String(error))).slice(0, 2000);
           await save();
         } finally {
@@ -500,7 +500,7 @@ export class Agents {
     );
     this.active.set(record.id, { connection, done, cancel });
     void done.catch(async (error) => {
-      record.status = 'blocked';
+      record.status = cancelled ? 'cancelled' : 'blocked';
       record.error = String(redact(String(error), this.secrets)).slice(0, 2000);
       this.active.delete(record.id);
       try {

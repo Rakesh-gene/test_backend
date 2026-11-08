@@ -56,7 +56,7 @@ requires a Kode-owned tree. Commands are argument arrays, never shell strings. T
 use a shell, explicitly declare the shell executable and its arguments. Commands
 may read/write outside cwd under the user's OS identity; this is **not an OS
 sandbox**. Kode therefore refuses arbitrary commands and write scope for read-only
-roots. Future provider adapters must enforce their supported sandbox boundary.
+roots. Codex assignments now require their native permission profile; optional strict container commands have a separate enforced boundary. See GAP-006/GAP-007 for qualification and limits.
 
 Commands run as durable asynchronous jobs. The CLI waits by default, `--detach`
 returns an ID, Ctrl+C requests cancellation, and other clients can inspect/cancel.

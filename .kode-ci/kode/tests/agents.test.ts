@@ -186,6 +186,28 @@ test('adapter validates native profile/model, relays structured answers and file
       },
     );
     expect((await agents.get(rejected.id)).error).toContain('reasoning');
+    let disconnect!: (error: Error) => void;
+    const initializing = new Promise<void>((_resolve, reject) => {
+      disconnect = reject;
+    });
+    const startup = new Agents(
+      workspace,
+      store,
+      otel,
+      () =>
+        ({
+          initialize: () => initializing,
+          close: () => disconnect(new Error('Cancelled during native initialization')),
+        }) as unknown as CodexConnection,
+    );
+    try {
+      const pending = await startup.start({ root: 'repo', prompt: 'cancel startup' });
+      await startup.cancel(pending.id);
+      await startup.stop();
+      expect((await startup.get(pending.id)).status).toBe('cancelled');
+    } finally {
+      await startup.stop();
+    }
   } finally {
     await agents.stop();
     await store.close();

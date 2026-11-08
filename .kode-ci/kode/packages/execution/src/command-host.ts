@@ -8,15 +8,20 @@ const gate = (chunk: Buffer) => {
   prefix = Buffer.concat([prefix, chunk]);
   const end = prefix.indexOf(10);
   if (end < 0) {
-    if (prefix.length > 16) process.exit(126);
+    if (prefix.length > 1024 * 1024) process.exit(126);
     return;
   }
   process.stdin.off('data', gate);
-  if (prefix.subarray(0, end).toString() !== 'KODE_GO') process.exit(126);
+  const line = prefix.subarray(0, end).toString();
+  if (line !== 'KODE_GO' && !line.startsWith('KODE_GO ')) process.exit(126);
+  const env =
+    line === 'KODE_GO' ? process.env : (JSON.parse(line.slice(8)) as Record<string, string>);
   const [executable, ...args] = process.argv.slice(2);
   if (!executable) process.exit(126);
   dispatched = true;
   const child = execa(executable, args, {
+    env,
+    extendEnv: false,
     windowsHide: true,
     stdio: ['pipe', 'inherit', 'inherit'],
     reject: false,

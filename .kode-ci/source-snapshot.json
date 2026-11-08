@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "sourceDigest": "3652b12d7037673695631454c3567e97cf87cc0df250c1323f5ff2abf369fd4b",
+  "sourceDigest": "8e422b2ceeb060cc78c9e46efc31191d9c319f7b6fe22e49fde74a8c87c79e3d",
   "entries": [
     {
       "path": ".github/workflows/ci.yml",
@@ -52,7 +52,7 @@
     },
     {
       "path": "apps/runner/src/agents.ts",
-      "sha256": "7a81b46be87d1e56bd1dcb0dd6217ae1e86625d8d10e97202da9b2a517215d98"
+      "sha256": "b7d7a0b721d84af0a9ddf0c4564d0599d0ba9dd9545d38cd1ffac136c7f40acd"
     },
     {
       "path": "apps/runner/src/approvals.ts",
@@ -156,15 +156,15 @@
     },
     {
       "path": "docs/phase-reports/P01.md",
-      "sha256": "23eeb2a712b5f362e93db82e7a7381f56244bce3e3ae1f759a64eff6dda9a9b9"
+      "sha256": "eb2edbc7a2b107b473e1165f763942df2bc4af39e0deef31d9d017565c7af94c"
     },
     {
       "path": "docs/phase-reports/P02.md",
-      "sha256": "cc36d6b7a143a0d66d555da5717f575e4dc70e2707a8a6ddefe65a7763375b1f"
+      "sha256": "3d5eb06b81892c1be7ba69e0036e7c81d3f601fc7851a7af306c53c8ba072b63"
     },
     {
       "path": "docs/phase-reports/P03.md",
-      "sha256": "cb1a66fc0dccd673b920418478f44e1d566c4ba9fed5f8b66f6f1b7af6d874dd"
+      "sha256": "d61ee471b2d14bd0e9376e30069a20a4eb522cab97621de7087c171f7883d199"
     },
     {
       "path": "docs/tech-stack.md",
@@ -172,7 +172,7 @@
     },
     {
       "path": "docs/workspace-and-commands.md",
-      "sha256": "b502e8e5c44ca2d139126b0be909a57e55d0d1a4056c946a1c5fd139523f9733"
+      "sha256": "4a7e734ed80b95cf4a284fc7a15e5cb80726609f043dacea36cb9245df8f1aef"
     },
     {
       "path": "eslint.config.mjs",
@@ -216,7 +216,7 @@
     },
     {
       "path": "packages/execution/src/command-host.ts",
-      "sha256": "874f4bc9fbb8f87262d99357c0ab3cd3a66382983cec3eb60f62f76b0e814edf"
+      "sha256": "8cb7b4cf088b193b158f087c0d8c60e7ac2fb8f8ae4c4055135386406bb35501"
     },
     {
       "path": "packages/execution/src/index.ts",
@@ -296,7 +296,7 @@
     },
     {
       "path": "packages/workspace/src/project.ts",
-      "sha256": "5cb7286820c494f56b059080618de27e6186f8d4d95a3c9d81e83d040670777f"
+      "sha256": "8237f4275b8b2fc698b6ebe0264acb85aca664e22b26e9c59e1b6d1ee36158a2"
     },
     {
       "path": "packages/workspace/src/roots.ts",
@@ -400,7 +400,7 @@
     },
     {
       "path": "tests/agents.test.ts",
-      "sha256": "d103a5e3f4257e00469e30be5a318e406870c582f24a39fdc08d968151f97547"
+      "sha256": "a1dc4d75669e4743853a7719acf092ff632e2e2edb3ff392ce924202e132f3e5"
     },
     {
       "path": "tests/approval-broker.test.ts",
@@ -424,7 +424,7 @@
     },
     {
       "path": "tests/process-ownership.test.ts",
-      "sha256": "d6145c386287ce02acb3faaf5535db300513537bcb898953717327795119c750"
+      "sha256": "f18ab2a710732ce2d04d93db56fda095f26e9af684003ce54c1e76b5df5af926"
     },
     {
       "path": "tests/provider-transport.test.ts",

@@ -25,6 +25,24 @@ test.runIf(process.platform === 'win32')(
     });
     const results: unknown[] = [];
     try {
+      const preload = join(root, 'preload.cjs');
+      await writeFile(
+        preload,
+        `require('fs').appendFileSync(${JSON.stringify(join(root, 'preload-runs'))},String(process.pid)+'\\n')`,
+      );
+      const preloaded = RepoManifest.parse({
+        version: 1,
+        commands: {
+          probe: {
+            run: ['node', '-e', 'console.log("TARGET_ONLY")'],
+            env: { NODE_OPTIONS: `--require ${JSON.stringify(preload)}` },
+          },
+        },
+      });
+      expect((await runDeclared(root, preloaded, 'probe')).status).toBe('passed');
+      expect(
+        (await readFile(join(root, 'preload-runs'), 'utf8')).trim().split(/\r?\n/),
+      ).toHaveLength(1);
       for (const crash of [false, true]) {
         const ready = join(root, `ready-${crash}`),
           escaped = join(root, `escaped-${crash}`);
@@ -79,6 +97,7 @@ test.runIf(process.platform === 'win32')(
             platform: process.platform,
             arch: process.arch,
             boundary: 'non-inherited Windows Job Object / kill-on-close / pre-dispatch gate',
+            trustedBootstrapPreloadExcluded: true,
             results,
           },
           null,

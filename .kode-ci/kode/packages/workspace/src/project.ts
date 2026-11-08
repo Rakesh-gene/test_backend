@@ -223,7 +223,8 @@ export async function startProcess(
     ownership ? [commandHost, resolved, ...args] : args,
     {
       cwd,
-      env: isolated ? process.env : env,
+      // Repository NODE_OPTIONS/LD_PRELOAD must never run in the trusted bootstrap.
+      env: isolated || ownership ? process.env : env,
       extendEnv: false,
       reject: false,
       windowsHide: true,
@@ -240,7 +241,7 @@ export async function startProcess(
       ownership.assign(child.pid);
       child.nodeChildProcess.once('exit', () => ownership.close());
       if (isolated) child.stdin!.write('KODE_GO\n');
-      else child.stdin!.end('KODE_GO\n');
+      else child.stdin!.end(`KODE_GO ${JSON.stringify(env)}\n`);
     } catch (error) {
       child.kill();
       ownership.close();

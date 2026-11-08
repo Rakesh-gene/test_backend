@@ -1,6 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import Database from 'better-sqlite3';
-import { EventInput } from '@kode/contracts';
+import { EventInput, NativeApproval, type NativeApprovalRecord } from '@kode/contracts';
+import { randomUUID } from 'node:crypto';
 
 let db: Database.Database;
 try {
@@ -33,6 +34,72 @@ parentPort!.on(
     try {
       let result: unknown;
       switch (message.method) {
+        case 'native.get': {
+          const row = db
+            .prepare(
+              "SELECT data FROM events WHERE kind='approval.updated' AND json_extract(data,'$.id')=? ORDER BY seq DESC LIMIT 1",
+            )
+            .get(message.data.id) as { data: string } | undefined;
+          if (!row) throw new Error('Unknown native approval.');
+          result = NativeApproval.parse(JSON.parse(row.data));
+          break;
+        }
+        case 'native.list':
+          result = db
+            .prepare(
+              "SELECT e.data FROM events e JOIN (SELECT json_extract(data,'$.id') AS request_id, max(seq) AS last_seq FROM events WHERE kind='approval.updated' GROUP BY request_id) x ON e.seq=x.last_seq " +
+                (message.data.unfinished
+                  ? "WHERE json_extract(e.data,'$.state') IN ('pending','decision_recorded','delivering') "
+                  : '') +
+                'ORDER BY e.seq DESC LIMIT 2000',
+            )
+            .all()
+            .map((row) => NativeApproval.parse(JSON.parse((row as { data: string }).data)));
+          break;
+        case 'native.open':
+        case 'native.transition':
+          result = db.transaction(() => {
+            const incoming = NativeApproval.parse(message.data.record);
+            const previous = db
+              .prepare(
+                "SELECT data FROM events WHERE kind='approval.updated' AND json_extract(data,'$.id')=? ORDER BY seq DESC LIMIT 1",
+              )
+              .get(incoming.id) as { data: string } | undefined;
+            const old: NativeApprovalRecord | undefined = previous
+              ? NativeApproval.parse(JSON.parse(previous.data))
+              : undefined;
+            if (message.method === 'native.open') {
+              if (old) throw new Error('Approval identity already exists.');
+              if (incoming.state !== 'pending' || incoming.version !== 1)
+                throw new Error('Invalid initial approval.');
+            } else {
+              if (
+                !old ||
+                old.version !== message.data.expectedVersion ||
+                old.fingerprint !== incoming.fingerprint ||
+                old.epoch !== incoming.epoch ||
+                incoming.version !== old.version + 1
+              )
+                throw new Error('Approval changed or is obsolete.');
+              const allowed: Record<string, string[]> = {
+                pending: ['decision_recorded', 'expired', 'cancelled', 'superseded'],
+                decision_recorded: ['delivering', 'delivery_unknown', 'superseded'],
+                delivering: ['resolved', 'delivery_unknown'],
+                resolved: ['resolved'],
+              };
+              if (!allowed[old.state]?.includes(incoming.state))
+                throw new Error('Invalid approval transition.');
+            }
+            db.prepare('INSERT INTO events(id,kind,task_id,data,time) VALUES(?,?,?,?,?)').run(
+              randomUUID(),
+              'approval.updated',
+              incoming.taskId,
+              JSON.stringify(incoming),
+              new Date().toISOString(),
+            );
+            return incoming;
+          })();
+          break;
         case 'append': {
           const input = EventInput.parse(message.data);
           const existing = db.prepare('SELECT * FROM events WHERE id = ?').get(input.id) as

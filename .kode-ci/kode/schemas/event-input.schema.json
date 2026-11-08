@@ -15,6 +15,7 @@
         "tool.updated",
         "approval.requested",
         "approval.resolved",
+        "approval.updated",
         "context.updated",
         "proof.updated"
       ]

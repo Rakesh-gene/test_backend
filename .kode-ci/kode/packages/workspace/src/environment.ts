@@ -1,9 +1,17 @@
 import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
-import { join, relative, resolve } from 'node:path';
+import { join, relative, resolve, dirname } from 'node:path';
 import { execa } from 'execa';
-import { findExecutable } from '@kode/execution';
+import { findExecutable, effectiveEnvironment } from '@kode/execution';
+import { existsSync } from 'node:fs';
 import { type Workspace, type TaskTree } from './roots.js';
-import { loadManifest, type Manifest, type Observer, quiet, runDeclared } from './project.js';
+import {
+  loadManifest,
+  commandDirectory,
+  type Manifest,
+  type Observer,
+  quiet,
+  runDeclared,
+} from './project.js';
 import { atomicJson, hash, inside, json, leased, scoped } from './state.js';
 
 export interface EnvironmentReceipt {
@@ -41,12 +49,61 @@ async function inputs(path: string, manifest: Manifest) {
   await walk(path);
   return files.sort((a, b) => a.path.localeCompare(b.path));
 }
-async function identity(manager: string, cwd: string) {
+function selectedEnvironment(manifest: Manifest, validation = false) {
+  return effectiveEnvironment({
+    ...(manifest.dependencies.prepare ? manifest.commands[manifest.dependencies.prepare]?.env : {}),
+    ...(validation && manifest.dependencies.validate
+      ? manifest.commands[manifest.dependencies.validate]?.env
+      : {}),
+  });
+}
+async function nodeIdentity(env: Record<string, string>, cwd: string, npm?: string) {
+  // npm.cmd prefers its sibling node.exe; `node` commands use the selected PATH.
+  const sibling = npm && process.platform === 'win32' ? join(dirname(npm), 'node.exe') : undefined;
+  const executable = sibling && existsSync(sibling) ? sibling : findExecutable('node', env.PATH);
+  if (!executable) throw new Error('Selected environment has no Node runtime.');
+  const result = await execa(
+    executable,
+    [
+      '-p',
+      'JSON.stringify({version:process.version,abi:process.versions.modules,arch:process.arch,platform:process.platform})',
+    ],
+    {
+      cwd,
+      env,
+      extendEnv: false,
+      windowsHide: true,
+      timeout: 15000,
+    },
+  );
+  return {
+    executable: await realpath(executable),
+    ...(JSON.parse(result.stdout) as Record<string, string>),
+  };
+}
+async function identity(manager: string, cwd: string, manifest: Manifest) {
+  if (manifest.dependencies.prepare)
+    cwd = await commandDirectory(cwd, manifest.commands[manifest.dependencies.prepare]!);
+  const env = selectedEnvironment(manifest);
+  const args = [
+    ...(manifest.dependencies.prepare
+      ? (manifest.commands[manifest.dependencies.prepare]?.run.slice(1) ?? [])
+      : []),
+    ...manifest.dependencies.flags,
+  ];
+  const option = (name: string) => {
+    const at = args.findIndex((arg) => arg.toLowerCase() === `--${name}`);
+    return at >= 0
+      ? args[at + 1]
+      : args.find((arg) => arg.toLowerCase().startsWith(`--${name}=`))?.slice(name.length + 3);
+  };
   const tool = manager === 'nuget' ? 'dotnet' : 'npm';
-  const executable = findExecutable(tool);
+  const executable = findExecutable(tool, env.PATH);
   if (!executable) throw new Error(`Missing environment tool: ${tool}.`);
   const result = await execa(executable, ['--version'], {
     cwd,
+    env,
+    extendEnv: false,
     reject: false,
     windowsHide: true,
     timeout: 15000,
@@ -54,27 +111,82 @@ async function identity(manager: string, cwd: string) {
   if (result.exitCode !== 0) throw new Error(`Cannot determine ${tool} version.`);
   const userConfig =
     manager === 'npm'
-      ? (process.env.NPM_CONFIG_USERCONFIG ??
-        join(process.env.USERPROFILE ?? process.env.HOME ?? '', '.npmrc'))
-      : join(
-          process.env.APPDATA ?? join(process.env.HOME ?? '', '.nuget'),
-          'NuGet',
-          'NuGet.Config',
-        );
-  const configurationHash = await readFile(userConfig).then(hash, () => 'absent');
+      ? (env.NPM_CONFIG_USERCONFIG ??
+        env.npm_config_userconfig ??
+        join(env.USERPROFILE ?? env.HOME ?? '', '.npmrc'))
+      : join(env.APPDATA ?? join(env.HOME ?? '', '.nuget'), 'NuGet', 'NuGet.Config');
+  const configs: Record<string, string> = {};
+  configs[userConfig] = await readFile(userConfig).then(hash, () => 'absent');
+  if (manager === 'npm') {
+    const configArgs: string[] = [];
+    for (const name of ['userconfig', 'globalconfig']) {
+      const selected = option(name);
+      if (selected) {
+        const path = resolve(cwd, selected);
+        configs[path] = await readFile(path).then(hash, () => 'absent');
+        configArgs.push(`--${name}`, path);
+      }
+    }
+    const config = await execa(executable, ['config', 'list', '--json', ...configArgs], {
+      cwd,
+      env,
+      extendEnv: false,
+      reject: false,
+      windowsHide: true,
+      timeout: 30000,
+      maxBuffer: 256 * 1024,
+    });
+    if (config.exitCode !== 0) throw new Error('Cannot determine effective npm configuration.');
+    configs.effective = hash(config.stdout);
+  } else {
+    const directories =
+      process.platform === 'win32'
+        ? [join(env['PROGRAMFILES(X86)'] ?? 'C:/Program Files (x86)', 'NuGet', 'Config')]
+        : ['/etc/opt/NuGet/Config', join(env.HOME ?? '', '.config', 'NuGet')];
+    for (const directory of directories) {
+      for (const name of (await readdir(directory).catch(() => [])).sort()) {
+        if (!/\.config$/i.test(name)) continue;
+        const path = join(directory, name);
+        configs[path] = await readFile(path).then(hash, () => 'unreadable');
+      }
+    }
+    for (let directory = cwd; ; directory = dirname(directory)) {
+      for (const name of ['NuGet.Config', 'NuGet.config', 'nuget.config']) {
+        const path = join(directory, name);
+        configs[path] = await readFile(path).then(hash, () => 'absent');
+      }
+      if (directory === dirname(directory)) break;
+    }
+    const explicit = option('configfile');
+    if (explicit) {
+      const path = resolve(cwd, explicit);
+      configs[path] = await readFile(path).then(hash, () => 'absent');
+    }
+  }
+  const configurationHash = hash(JSON.stringify(configs));
   const environmentHash = hash(
     JSON.stringify(
-      Object.entries(process.env)
+      Object.entries(env)
         .filter(([key]) =>
-          /^(npm_config_|nuget_|dotnet_|node_options$|cc$|cxx$|cflags$|cxxflags$)/i.test(key),
+          /^(npm_config_|nuget_|dotnet_|msbuild|node_options$|cc$|cxx$|cflags$|cxxflags$)/i.test(
+            key,
+          ),
         )
         .sort(),
     ),
   );
   return {
-    tool: result.stdout.trim(),
-    node: process.version,
-    abi: process.versions.modules,
+    tool: result.stdout.trim().split(/\r?\n/).at(-1),
+    executable: await realpath(executable),
+    ...(manager === 'npm'
+      ? {
+          npmRuntime: await nodeIdentity(env, cwd, executable),
+          commandRuntime: await nodeIdentity(env, cwd),
+          ...(manifest.dependencies.validate
+            ? { validatorRuntime: await nodeIdentity(selectedEnvironment(manifest, true), cwd) }
+            : {}),
+        }
+      : {}),
     platform: process.platform,
     arch: process.arch,
     configurationHash,
@@ -104,6 +216,7 @@ export async function healthy(
   const manager = manifest.dependencies.manager;
   if (manager === 'none') return { ok: true, reason: 'No managed dependencies declared.' };
   if (manager === 'npm') {
+    const env = selectedEnvironment(manifest);
     const lock = await json<{
       packages?: Record<string, { version?: string; integrity?: string; optional?: boolean }>;
     }>(join(path, 'package-lock.json')).catch(() => undefined);
@@ -137,13 +250,19 @@ export async function healthy(
       )
         return { ok: false, reason: `Installed lock metadata differs: ${name}` };
     }
-    const result = await execa(findExecutable('npm')!, ['ls', '--all', '--json', '--offline'], {
-      cwd: path,
-      reject: false,
-      windowsHide: true,
-      timeout: 30000,
-      maxBuffer: 1024 * 1024,
-    });
+    const result = await execa(
+      findExecutable('npm', env.PATH)!,
+      ['ls', '--all', '--json', '--offline'],
+      {
+        cwd: path,
+        env,
+        extendEnv: false,
+        reject: false,
+        windowsHide: true,
+        timeout: 30000,
+        maxBuffer: 1024 * 1024,
+      },
+    );
     return {
       ok: result.exitCode === 0,
       reason:
@@ -231,7 +350,7 @@ export async function prepareEnvironment(
   const runtime =
     manifest.dependencies.manager === 'none'
       ? {}
-      : await identity(manifest.dependencies.manager, target);
+      : await identity(manifest.dependencies.manager, target, manifest);
   const fingerprintFor = (runtimeIdentity: typeof runtime) =>
     hash(
       JSON.stringify({
@@ -271,6 +390,7 @@ export async function prepareEnvironment(
       const validation = await runDeclared(target, manifest, manifest.dependencies.validate, {
         signal: options.signal,
         observe,
+        env: selectedEnvironment(manifest, true),
       });
       if (validation.status !== 'passed')
         health = { ok: false, reason: 'Declared environment validation failed.' };
@@ -355,9 +475,15 @@ export async function prepareEnvironment(
         : {};
       if (options.offline && manifest.dependencies.manager === 'nuget') {
         const locations = await execa(
-          findExecutable('dotnet')!,
+          findExecutable('dotnet', selectedEnvironment(manifest).PATH)!,
           ['nuget', 'locals', 'global-packages', '--list'],
-          { cwd: target, env: configured.env, windowsHide: true, timeout: 15000 },
+          {
+            cwd: await commandDirectory(target, configured),
+            env: selectedEnvironment(manifest),
+            extendEnv: false,
+            windowsHide: true,
+            timeout: 15000,
+          },
         );
         const cache = locations.stdout.replace(/^global-packages:\s*/i, '').trim();
         // Explicit local source prohibits fallback to remote feeds in offline preparation.
@@ -374,6 +500,7 @@ export async function prepareEnvironment(
           const validation = await runDeclared(target, manifest, manifest.dependencies.validate, {
             signal: options.signal,
             observe,
+            env: selectedEnvironment(manifest, true),
           });
           if (validation.status !== 'passed')
             after = { ok: false, reason: 'Declared environment validation failed.' };
@@ -389,7 +516,9 @@ export async function prepareEnvironment(
         // Package managers may bootstrap their user configuration on first restore.
         // Bind the successful receipt to the configuration that actually exists
         // afterward, rather than forcing an identical second restore on a fresh host.
-        receipt.fingerprint = fingerprintFor(await identity(manifest.dependencies.manager, target));
+        receipt.fingerprint = fingerprintFor(
+          await identity(manifest.dependencies.manager, target, manifest),
+        );
         receipt.state = 'ready';
       } catch (error) {
         receipt.state = 'failed';

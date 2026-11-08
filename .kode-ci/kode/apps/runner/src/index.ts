@@ -24,6 +24,11 @@ import {
 } from '@kode/observability';
 import { workspacePaths, protectStateDirectory, type Paths } from './paths.js';
 import { workspaceMethods } from './workspace.js';
+import { Agents } from './agents.js';
+import { z } from 'zod';
+import { executionPolicy } from '@kode/workspace';
+import { executionCapabilities } from '@kode/execution';
+export { executionCapabilities } from '@kode/execution';
 export { workspacePaths } from './paths.js';
 
 export async function startRunner(root: string, options: { testing?: boolean } = {}) {
@@ -64,9 +69,11 @@ export async function startRunner(root: string, options: { testing?: boolean } =
   let closing = false;
   let observability: ReturnType<typeof telemetry> | undefined;
   let projects: ReturnType<typeof workspaceMethods> | undefined;
+  let agents: Agents | undefined;
   async function cleanup() {
     if (closing) return;
     closing = true;
+    await agents?.stop();
     await projects?.stop();
     for (const socket of sockets) socket.destroy();
     if (server?.listening) await new Promise<void>((resolve) => server!.close(() => resolve()));
@@ -82,6 +89,7 @@ export async function startRunner(root: string, options: { testing?: boolean } =
   }
   try {
     await protectStateDirectory(paths.state);
+    await protectStateDirectory(paths.control);
     await writeFile(paths.token, token, { mode: 0o600 });
     observability = telemetry({ logFile: paths.log, secrets: [token] });
     store = new Store(paths.database);
@@ -104,6 +112,8 @@ export async function startRunner(root: string, options: { testing?: boolean } =
       data: { protocol: 1, pid: process.pid },
     });
     await projects.recover();
+    agents = new Agents(projects.workspace, store, observability);
+    await agents.recover();
     async function handle(request: Request): Promise<unknown> {
       switch (request.method) {
         case 'ping':
@@ -115,13 +125,67 @@ export async function startRunner(root: string, options: { testing?: boolean } =
             root: paths.root,
             phase: 'P03 workspace and execution',
             workspace: await projects!.workspace.list(),
-            providers: 'not connected',
+            providers: 'Codex app-server available through agent.start; Claude/Copilot deferred',
             fixtureMode: options.testing ?? false,
             telemetry: await observability!.status(),
+            execution: {
+              ...executionCapabilities,
+              commands:
+                (await executionPolicy(paths.state)).mode === 'container'
+                  ? {
+                      ownership: 'container-pid-namespace',
+                      filesystem: 'isolated-task-tree',
+                      strictIsolation: true,
+                      summary: 'Container: isolated task tree; read-only root; network disabled',
+                    }
+                  : executionCapabilities.commands,
+              policy: await executionPolicy(paths.state),
+            },
           };
         case 'events.list': {
           const p = ReplayParams.parse(request.params);
-          return store!.list(p.after, p.limit);
+          const events = await store!.list(p.after, p.limit);
+          const bounded = [];
+          let bytes = 2048;
+          for (const event of events) {
+            const size = Buffer.byteLength(JSON.stringify(event));
+            if (bytes + size > MAX_FRAME_BYTES) break;
+            bounded.push(event);
+            bytes += size;
+          }
+          return bounded;
+        }
+        case 'agent.start':
+          return agents!.start(request.params);
+        case 'agent.get':
+          return agents!.get(z.object({ id: z.string().uuid() }).strict().parse(request.params).id);
+        case 'agent.cancel':
+          return agents!.cancel(
+            z.object({ id: z.string().uuid() }).strict().parse(request.params).id,
+          );
+        case 'approval.list':
+          return (await agents!.broker.list()).slice(0, 20).map((record) => ({
+            ...record,
+            details: 'Use approval.get to inspect full scope.',
+            command: record.command.slice(0, 256),
+            reason: record.reason.slice(0, 256),
+          }));
+        case 'approval.get':
+          return store!.call('native.get', {
+            id: z.object({ id: z.string().uuid() }).strict().parse(request.params).id,
+          });
+        case 'approval.decide': {
+          const p = z
+            .object({
+              id: z.string().uuid(),
+              version: z.number().int().positive(),
+              fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+              choice: z.enum(['accept', 'decline', 'cancel', 'answer']),
+              answers: z.unknown().optional(),
+            })
+            .strict()
+            .parse(request.params);
+          return agents!.broker.decide(p.id, p.version, p.fingerprint, p.choice, p.answers);
         }
         case 'fixture.load': {
           if (!options.testing)
@@ -131,7 +195,9 @@ export async function startRunner(root: string, options: { testing?: boolean } =
         }
         case 'approval.respond': {
           if (!options.testing)
-            throw new Error('No native approval adapters are connected in P01.');
+            throw new Error(
+              'Native requests require approval.decide with their version and fingerprint.',
+            );
           const p = DecisionParams.parse(request.params);
           return store!.decision(p.requestId, p.decision, p.expectedVersion);
         }
@@ -344,7 +410,15 @@ export class RunnerClient {
     socket.on('error', fail);
   }
   static async connect(paths: Paths, token?: string) {
-    const credential = token ?? (await readFile(paths.token, 'utf8'));
+    const credential =
+      token ??
+      (await readFile(paths.token, 'utf8').catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT')
+          throw new Error(
+            'Runner control credential is unavailable. If upgrading a legacy runner, stop it and restart Kode before attaching.',
+          );
+        throw error;
+      }));
     const socket = connect(paths.endpoint);
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(

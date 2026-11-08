@@ -136,8 +136,25 @@ redacted before event/log/export sinks.
 See [P00](docs/phase-reports/P00.md), [P01](docs/phase-reports/P01.md), the
 [implementation phases](docs/implementation-plan.md), and [stack](docs/tech-stack.md).
 The [inspected native CI run](docs/gap-reports/GAP-003.md) passed clean installation,
-compile/lint, 29 Kode tests, actual PTY, strict local probes and the selected backend/frontend
+compile/lint, 29 Kode tests at that revision, actual PTY, strict local probes and the selected backend/frontend
 repositories on Windows x64, Linux x64 and macOS arm64. Each repository contributes
 13 tests, and seven integration assertion groups traverse Vite into the PostgreSQL API.
 See [reproduction and fixture configuration](docs/ci/README.md). Other architecture pairs,
 native provider parity and the remaining later-phase gaps stay explicit in the ledger.
+
+[GAP-005 validation](docs/gap-reports/GAP-005.md) adds standard OTel queue/drop/failure
+diagnostics in status/the CLI and durable job trace reconciliation after a crash.
+The GAP-005 revision had 31 tests. A native Windows ten-minute PTY replay processed
+120,000 events with 150 ms key-to-visible p95; short native regressions complement it.
+
+Native Codex assignments now relay approvals in the rich terminal, including durable
+decisions, expiry, interruption and restart reconciliation. See [GAP-006](docs/gap-reports/GAP-006.md)
+for CLI examples and the distinction between native acknowledgement and tool success.
+
+Optional `kode execution container <local-image>` pins a Linux image for isolated
+task-tree commands, with no network or native fallback. Native Windows commands use
+kernel Job Objects; native filesystem access still uses OS-user permissions. See
+[GAP-007](docs/gap-reports/GAP-007.md) for supported modes and current container limits.
+[GAP-008](docs/gap-reports/GAP-008.md) adds real SQLite addon health, alternate Node ABI,
+SDK selection and effective configuration qualification. The suite now contains 40
+tests; the Windows kernel ownership test is explicitly skipped on other hosts.

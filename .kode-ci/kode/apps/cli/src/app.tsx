@@ -11,6 +11,13 @@ import { RunnerClient, ensureRunner } from '@kode/runner';
 import type { TelemetryHealth } from '@kode/observability';
 
 const panes = ['Overview', 'Agents', 'Tools', 'Approvals', 'Context', 'Proof', 'Memory'] as const;
+type NativeQuestion = {
+  id: string;
+  question: string;
+  options?: { label: string }[] | null;
+  isOther?: boolean;
+  isSecret?: boolean;
+};
 export function App({
   initialClient,
   root,
@@ -35,11 +42,36 @@ export function App({
   const [filter, setFilter] = useState('');
   const [filtering, setFiltering] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [answering, setAnswering] = useState<{
+    id: string;
+    version: number;
+    fingerprint: string;
+    questions: NativeQuestion[];
+    index: number;
+    text: string;
+    answers: Record<string, { answers: string[] }>;
+  }>();
+  const [details, setDetails] = useState<string>();
+  const [detailPage, setDetailPage] = useState(0);
   const [telemetry, setTelemetry] = useState<TelemetryHealth>();
+  const [boundary, setBoundary] = useState<string>();
   const [roots, setRoots] = useState<
     { name: string; path: string; access: string; kind: string }[]
   >([]);
   const pending = [...view.approvals.values()].filter((a) => a.state === 'pending');
+  const armedChoices = pending.find((a) => a.id === armed)?.native?.choices ?? [];
+  const nativeActions = [
+    armedChoices.includes('accept') ? 'y approve once' : '',
+    armedChoices.includes('decline')
+      ? 'n deny'
+      : armedChoices.includes('cancel')
+        ? 'n deny by cancelling turn'
+        : '',
+    armedChoices.includes('cancel') ? 'x cancel' : '',
+    'Esc defer',
+  ]
+    .filter(Boolean)
+    .join(' / ');
   useEffect(() => {
     const resize = () => setColumns(terminal.columns || 100);
     stdout.on('resize', resize);
@@ -67,8 +99,14 @@ export function App({
         } while (!disposed && page.length === 100 && pages < 5);
         const registry = (await client.request('folder.list')) as { roots: typeof roots };
         if (Date.now() - lastHealth >= 2000) {
-          const status = (await client.request('status')) as { telemetry?: TelemetryHealth };
-          if (!disposed) setTelemetry(status.telemetry);
+          const status = (await client.request('status')) as {
+            telemetry?: TelemetryHealth;
+            execution?: { commands: { summary: string } };
+          };
+          if (!disposed) {
+            setTelemetry(status.telemetry);
+            setBoundary(status.execution?.commands.summary);
+          }
           lastHealth = Date.now();
         }
         if (!disposed) {
@@ -95,6 +133,65 @@ export function App({
     };
   }, [client]);
   useInput((input, key) => {
+    if (answering) {
+      if (key.escape) {
+        setAnswering(undefined);
+        return;
+      }
+      if (key.return) {
+        const question = answering.questions[answering.index]!;
+        const chosen = question.options?.[Number(answering.text) - 1]?.label ?? answering.text;
+        if (
+          !chosen ||
+          (question.options?.length &&
+            !question.isOther &&
+            !question.options.some((option) => option.label === chosen))
+        ) {
+          setMessage('Choose an offered option number or label.');
+          return;
+        }
+        const answers = { ...answering.answers, [question.id]: { answers: [chosen] } };
+        if (answering.index + 1 < answering.questions.length) {
+          setAnswering({ ...answering, index: answering.index + 1, text: '', answers });
+          return;
+        }
+        setBusy(true);
+        void client
+          .request('approval.decide', {
+            id: answering.id,
+            version: answering.version,
+            fingerprint: answering.fingerprint,
+            choice: 'answer',
+            answers,
+          })
+          .then(() => setMessage('Answers recorded for delivery; native resolution is separate.'))
+          .catch((error) => setMessage(String(error)))
+          .finally(() => {
+            setBusy(false);
+            setAnswering(undefined);
+            setArmed(undefined);
+          });
+        return;
+      }
+      if (key.backspace || key.delete)
+        setAnswering({ ...answering, text: answering.text.slice(0, -1) });
+      else if (!key.ctrl && !key.meta)
+        setAnswering({ ...answering, text: (answering.text + input).slice(0, 4096) });
+      return;
+    }
+    if (details && (input === 'j' || key.pageDown)) {
+      setDetailPage((page) => page + 1);
+      return;
+    }
+    if (details && (input === 'k' || key.pageUp)) {
+      setDetailPage((page) => Math.max(0, page - 1));
+      return;
+    }
+    if (pane === 3 && input === 'd') {
+      setDetails(details ? undefined : pending[selection]?.id);
+      setDetailPage(0);
+      return;
+    }
     if (filtering) {
       if (key.return || key.escape) setFiltering(false);
       else if (key.backspace || key.delete) setFilter((s) => s.slice(0, -1));
@@ -138,15 +235,68 @@ export function App({
       setSelection((s) => Math.max(0, s - 1));
       setArmed(undefined);
     }
-    if (key.return && pane === 3 && pending[selection] && !busy) setArmed(pending[selection]!.id);
-    if (armed && pane === 3 && (input === 'y' || input === 'n') && !busy) {
+    if (key.return && pane === 3 && pending[selection] && !busy) {
+      const selected = pending[selection]!;
+      if (selected.native?.kind === 'question') {
+        const questions = JSON.parse(selected.native.details).questions as NativeQuestion[];
+        if (!questions?.length) {
+          setMessage('Native question has no supported fields. Cancel this invocation.');
+          return;
+        }
+        setAnswering({
+          id: selected.id,
+          version: selected.version,
+          fingerprint: selected.native.fingerprint,
+          questions,
+          index: 0,
+          text: '',
+          answers: {},
+        });
+      } else setArmed(selected.id);
+    }
+    if (armed && pane === 3 && ['y', 'n', 'x'].includes(input) && !busy) {
       const approval = pending.find((a) => a.id === armed);
       if (!approval) {
         setArmed(undefined);
         return;
       }
       setBusy(true);
-      setMessage('Sending fixture decision…');
+      setMessage(
+        approval.fixture
+          ? 'Sending fixture decision…'
+          : 'Recording native decision; delivery and tool outcome are separate.',
+      );
+      if (approval.native) {
+        const choice =
+          input === 'y'
+            ? 'accept'
+            : input === 'n' && approval.native.choices.includes('decline')
+              ? 'decline'
+              : 'cancel';
+        if (!approval.native.choices.includes(choice)) {
+          setBusy(false);
+          setMessage('This choice is not supported. Inspect the native request.');
+          return;
+        }
+        void client
+          .request('approval.decide', {
+            id: approval.id,
+            version: approval.version,
+            fingerprint: approval.native.fingerprint,
+            choice,
+          })
+          .then(() =>
+            setMessage(
+              'Native decision recorded; awaiting native acknowledgement and actual tool outcome.',
+            ),
+          )
+          .catch((error) => setMessage(String(error)))
+          .finally(() => {
+            setBusy(false);
+            setArmed(undefined);
+          });
+        return;
+      }
       void client
         .request('approval.respond', {
           requestId: armed,
@@ -192,7 +342,7 @@ export function App({
       <Text color={fixture ? 'yellow' : 'cyan'}>
         {fixture
           ? ' FIXTURE MODE • simulated agents and tools • no implementation or native approval execution'
-          : ' P03 WORKSPACE • repo commands and environments • provider execution arrives in later phases'}
+          : ' WORKSPACE • Codex native assignments • repo commands and environments'}
       </Text>
       {telemetry && (
         <Text
@@ -241,6 +391,7 @@ export function App({
           </Text>
           {(pane === 0 || pane === 1) && (
             <>
+              {pane === 0 && boundary && <Text dimColor>Repo commands: {boundary}</Text>}
               {pane === 0 &&
                 roots.map((item) => (
                   <Box key={item.name} flexDirection="column">
@@ -264,8 +415,7 @@ export function App({
                 ))
               ) : (
                 <Text dimColor>
-                  No tasks dispatched. Add providers in later phases; use --fixture to inspect the
-                  prototype.
+                  No tasks dispatched. Use kode agent start to create a Codex assignment.
                 </Text>
               )}
               <Box marginTop={1}>
@@ -293,9 +443,24 @@ export function App({
                     </Text>
                     <Text dimColor>
                       {' '}
-                      {a.taskId} · {a.fixture ? 'SIMULATED request' : 'native'} · version{' '}
+                      {a.taskId} ·{' '}
+                      {a.fixture ? 'SIMULATED request' : `native ${a.native?.kind ?? ''}`} · version{' '}
                       {a.version}
                     </Text>
+                    {a.native && (
+                      <>
+                        <Text>{safeTerminal(a.native.cwd)}</Text>
+                        <Text>{safeTerminal(a.native.reason)}</Text>
+                        <Text>
+                          Choices: {a.native.choices.join(', ')} · one invocation / turn only
+                        </Text>
+                        <Text dimColor>Inspect full scope: kode approval inspect {a.id}</Text>
+                        <Text dimColor>
+                          d inspect in CLI · j/k detail pages · fingerprint{' '}
+                          {a.native.fingerprint.slice(0, 12)}
+                        </Text>
+                      </>
+                    )}
                   </Box>
                 ))
               ) : (
@@ -303,10 +468,53 @@ export function App({
               )}
               <Text color="yellow">
                 {armed
-                  ? 'Confirm selected fixture request: y approve / n deny / Esc back'
+                  ? pending.find((a) => a.id === armed)?.fixture
+                    ? 'Confirm selected fixture request: y approve / n deny / Esc back'
+                    : `Confirm native request: ${nativeActions}`
                   : '↑↓ select · Enter inspect/arm · arriving requests never select a response'}
               </Text>
               {busy && <Text>Delivering decision…</Text>}
+              {details && (
+                <Box flexDirection="column" borderStyle="single">
+                  <Text>Native request details · page {detailPage + 1} · j/k pages · d close</Text>
+                  {(
+                    safeTerminal(
+                      JSON.stringify(view.approvals.get(details)?.native, null, 2),
+                    ).match(new RegExp(`.{1,${Math.max(20, columns - 12)}}`, 'g')) ?? []
+                  )
+                    .slice(detailPage * 8, (detailPage + 1) * 8)
+                    .map((line, index) => (
+                      <Text key={index}>{line}</Text>
+                    ))}
+                </Box>
+              )}
+              {answering && (
+                <Box flexDirection="column" borderStyle="single">
+                  <Text>{safeTerminal(answering.questions[answering.index]!.question)}</Text>
+                  {answering.questions[answering.index]!.options?.map((option, index) => (
+                    <Text key={index}>
+                      {index + 1}. {safeTerminal(option.label)}
+                    </Text>
+                  ))}
+                  <Text>
+                    Answer:{' '}
+                    {answering.questions[answering.index]!.isSecret
+                      ? '•'.repeat(answering.text.length)
+                      : safeTerminal(answering.text)}
+                    ▌
+                  </Text>
+                  <Text>Enter next/send · Esc defer without answering</Text>
+                </Box>
+              )}
+              {[...view.approvals.values()]
+                .filter((a) => a.native && a.state !== 'pending')
+                .slice(-4)
+                .map((a) => (
+                  <Text key={a.id} color={a.state === 'delivery_unknown' ? 'yellow' : undefined}>
+                    {a.id.slice(0, 8)} · {a.state} · {a.native?.delivery} · tool:{' '}
+                    {a.native?.outcome ?? 'not observed'}
+                  </Text>
+                ))}
             </>
           )}
           {pane === 4 && (

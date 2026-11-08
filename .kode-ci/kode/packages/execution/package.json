@@ -10,6 +10,7 @@
     }
   },
   "dependencies": {
-    "execa": "10.2.1"
+    "execa": "10.2.1",
+    "koffi": "3.2.1"
   }
 }

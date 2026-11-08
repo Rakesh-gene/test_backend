@@ -24,7 +24,20 @@ export async function atomicJson(path: string, value: unknown) {
   } finally {
     await handle.close();
   }
-  await rename(temporary, path);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rename(temporary, path);
+      break;
+    } catch (error) {
+      if (
+        process.platform !== 'win32' ||
+        attempt >= 5 ||
+        !['EPERM', 'EACCES', 'EBUSY'].includes((error as NodeJS.ErrnoException).code ?? '')
+      )
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, 10 * 2 ** attempt));
+    }
+  }
 }
 export async function json<T>(path: string): Promise<T> {
   return JSON.parse(await readFile(path, 'utf8')) as T;

@@ -1,5 +1,5 @@
 import { execa } from 'execa';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 await mkdir('.artifacts', { recursive: true });
@@ -14,8 +14,9 @@ const checks = [
     [
       'node_modules/vitest/vitest.mjs',
       'run',
+      '--reporter=verbose',
       '--reporter=json',
-      '--outputFile=.artifacts/vitest.json',
+      '--outputFile.json=.artifacts/vitest.json',
     ],
   ],
   ['terminal', ['scripts/terminal-test.mjs']],
@@ -30,6 +31,15 @@ for (const [name, args] of checks) {
     windowsHide: true,
     maxBuffer: 2 * 1024 * 1024,
   });
+  if (name === 'tests' && result.exitCode === 0) {
+    const report = JSON.parse(await readFile('.artifacts/vitest.json', 'utf8'));
+    if (
+      !report.success ||
+      report.numFailedTests ||
+      report.numPassedTests + report.numPendingTests + report.numTodoTests !== report.numTotalTests
+    )
+      throw new Error('Vitest report is incomplete; unfinished tests cannot count as acceptance.');
+  }
   results.push({
     name,
     command: ['node', ...args],

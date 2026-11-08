@@ -10,6 +10,8 @@
     }
   },
   "dependencies": {
+    "@kode/execution": "0.1.0",
+    "@kode/providers": "0.1.0",
     "@kode/workspace": "0.1.0",
     "zod": "4.6.7",
     "@kode/contracts": "0.1.0",

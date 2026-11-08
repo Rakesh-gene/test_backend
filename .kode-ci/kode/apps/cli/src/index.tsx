@@ -2,7 +2,7 @@
 import React from 'react';
 import { Command } from 'commander';
 import { render } from 'ink';
-import { ensureRunner, RunnerClient, workspacePaths } from '@kode/runner';
+import { ensureRunner, RunnerClient, workspacePaths, executionCapabilities } from '@kode/runner';
 import { providerInventory } from '@kode/providers';
 import { App } from './app.js';
 import type { Request } from '@kode/contracts';
@@ -28,6 +28,7 @@ program
       npmBaseline: '11.19.1',
       platform: process.platform,
       arch: process.arch,
+      execution: executionCapabilities,
       providers: await providerInventory(),
       phases: {
         P00: 'deferred provider/platform gates',
@@ -60,6 +61,18 @@ program
     }
   });
 const runnerCommand = program.command('runner').description('Manage the local workspace runner');
+const executionCommand = program
+  .command('execution')
+  .description('Inspect or select host-controlled command isolation');
+executionCommand.command('inspect').action(() => rpc('execution.inspect'));
+executionCommand
+  .command('container <image>')
+  .description('Pin a locally installed Linux image; strict task-tree commands, network disabled')
+  .action((image: string) => rpc('execution.configure', { mode: 'container', image }));
+executionCommand
+  .command('native')
+  .description('Use native commands with the displayed OS-user boundary')
+  .action(() => rpc('execution.configure', { mode: 'native' }));
 async function rpc(method: Request['method'], params: Record<string, unknown> = {}) {
   const client = await ensureRunner(program.opts().root);
   try {
@@ -156,6 +169,50 @@ async function job(
 const commands = program
   .command('command')
   .description('Execute named kode.yaml commands literally');
+const agents = program
+  .command('agent')
+  .description('Run a Codex assignment with native approval relay');
+agents
+  .command('start <root>')
+  .requiredOption('--prompt <text>', 'Assignment description')
+  .option('--tree <id>', 'Isolated input tree; required for workspace writes')
+  .option('--model <model>', 'Model advertised by the native runtime')
+  .option('--reasoning <effort>', 'Native reasoning effort')
+  .option('--sandbox <mode>', 'read-only or workspace-write', 'read-only')
+  .option('--timeout-seconds <seconds>', 'Bounded assignment lifetime', '600')
+  .action((root, options) =>
+    rpc('agent.start', {
+      root,
+      tree: options.tree,
+      prompt: options.prompt,
+      model: options.model,
+      reasoning: options.reasoning,
+      sandbox: options.sandbox,
+      timeoutSeconds: Number(options.timeoutSeconds),
+    }),
+  );
+agents.command('get <id>').action((id) => rpc('agent.get', { id }));
+agents.command('cancel <id>').action((id) => rpc('agent.cancel', { id }));
+const approvals = program
+  .command('approval')
+  .description('Inspect and answer live native requests');
+approvals.command('list').action(() => rpc('approval.list'));
+approvals.command('inspect <id>').action((id) => rpc('approval.get', { id }));
+approvals
+  .command('decide <id>')
+  .requiredOption('--version <number>', 'Displayed request version')
+  .requiredOption('--fingerprint <hash>', 'Displayed operation fingerprint')
+  .requiredOption('--choice <choice>', 'accept, decline, cancel or answer')
+  .option('--answers <json>', 'Native structured question answers')
+  .action((id, options) =>
+    rpc('approval.decide', {
+      id,
+      version: Number(options.version),
+      fingerprint: options.fingerprint,
+      choice: options.choice,
+      ...(options.answers ? { answers: JSON.parse(options.answers) } : {}),
+    }),
+  );
 commands
   .command('run <root> <command>')
   .option('--tree <id>', 'Run in an isolated task tree')

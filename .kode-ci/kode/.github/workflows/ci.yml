@@ -7,8 +7,19 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      KODE_REQUIRE_ALT_SDK: '1'
+      KODE_VERIFY_TIMEOUT_MS: '240000'
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 25.0.0
+      - name: Record alternate ABI runtime
+        shell: pwsh
+        run: |
+          $alternate = Split-Path (node -p "process.execPath")
+          "KODE_ALT_NODE_DIR=$alternate" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - uses: actions/setup-node@v4
         with:
           node-version: 24.22.1
@@ -16,16 +27,20 @@ jobs:
       - run: npm ci
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.101
+          dotnet-version: |
+            9.0.200
+            10.0.101
       - run: node scripts/setup-xerj.mjs
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm test
-      - run: npm run test:terminal
+      - run: node scripts/verify.mjs
       - run: npm run probe -- --offline --require-local
       - run: node scripts/qualify-observability.mjs
         env:
           KODE_LOAD_SECONDS: '10'
+      - name: Strict Linux container containment
+        if: runner.os == 'Linux'
+        run: |
+          docker pull mcr.microsoft.com/dotnet/sdk:10.0
+          node scripts/qualify-containment.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -8,6 +8,7 @@ export const eventKinds = [
   'tool.updated',
   'approval.requested',
   'approval.resolved',
+  'approval.updated',
   'context.updated',
   'proof.updated',
 ] as const;
@@ -57,8 +58,16 @@ export const RpcRequest = z
       'repo.inspect',
       'env.inspect',
       'job.start',
+      'execution.configure',
+      'execution.inspect',
       'job.get',
       'job.cancel',
+      'agent.start',
+      'agent.get',
+      'agent.cancel',
+      'approval.list',
+      'approval.get',
+      'approval.decide',
     ]),
     params: z.record(z.string(), z.unknown()).default({}),
   })
@@ -80,6 +89,41 @@ export const RpcResponse = z
   })
   .strict();
 export type Response = z.infer<typeof RpcResponse>;
+export const NativeApproval = z.object({
+  id: z.string().uuid(),
+  taskId: z.string().uuid(),
+  provider: z.literal('codex'),
+  epoch: z.string().uuid(),
+  nativeId: z.string().max(200),
+  threadId: z.string().max(200),
+  turnId: z.string().max(200),
+  itemId: z.string().max(200),
+  kind: z.enum(['command', 'file', 'question', 'permissions']),
+  command: z.string().max(4096),
+  cwd: z.string().max(4096),
+  reason: z.string().max(2048),
+  details: z.string().max(8192),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  choices: z.array(z.enum(['accept', 'decline', 'cancel', 'answer'])).max(4),
+  state: z.enum([
+    'pending',
+    'decision_recorded',
+    'delivering',
+    'resolved',
+    'expired',
+    'cancelled',
+    'superseded',
+    'delivery_unknown',
+  ]),
+  version: z.number().int().positive(),
+  deadline: z.number(),
+  decision: z.string().optional(),
+  delivery: z.string().optional(),
+  outcome: z.string().optional(),
+  traceContext: TraceContext.optional(),
+  fixture: z.literal(false),
+});
+export type NativeApprovalRecord = z.infer<typeof NativeApproval>;
 export const ReplayParams = z
   .object({
     after: z.number().int().nonnegative().default(0),
@@ -108,6 +152,7 @@ export interface ApprovalView {
   state: string;
   version: number;
   fixture: boolean;
+  native?: NativeApprovalRecord;
 }
 export interface ViewState {
   cursor: number;
@@ -122,6 +167,21 @@ export function projectEvent(state: ViewState, event: KodeEvent): ViewState {
   if (event.seq <= state.cursor) return state;
   state.cursor = event.seq;
   state.events = [...state.events.slice(-199), event];
+  if (event.kind === 'approval.updated') {
+    const parsed = NativeApproval.safeParse(event.data);
+    if (parsed.success) {
+      const record = parsed.data;
+      state.approvals.set(record.id, {
+        id: record.id,
+        taskId: record.taskId,
+        command: record.command,
+        state: record.state,
+        version: record.version,
+        fixture: false,
+        native: record,
+      });
+    }
+  }
   if (event.kind === 'task.updated' && event.taskId) {
     const parsed = z
       .object({ title: z.string(), agent: z.string(), status: z.string(), provider: z.string() })

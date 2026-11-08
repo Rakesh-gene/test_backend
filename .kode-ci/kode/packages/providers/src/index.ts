@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { findExecutable, command } from '@kode/execution';
+import { findExecutable, command, windowsOwnership, commandHost } from '@kode/execution';
 import { redact } from '@kode/contracts';
 
 export async function providerInventory() {
@@ -33,6 +33,7 @@ export async function providerInventory() {
 }
 
 export class CodexConnection {
+  private ownership = windowsOwnership();
   private child: ChildProcessWithoutNullStreams;
   private next = 0;
   private buffer = '';
@@ -41,10 +42,28 @@ export class CodexConnection {
     { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }
   >();
   readonly notifications: { method: string; params: unknown }[] = [];
-  onRequest?: (method: string, params: unknown) => Promise<unknown>;
-  constructor(executable = findExecutable('codex')) {
+  private serverRequests = new Map<string, string>();
+  onRequest?: (method: string, params: unknown, id: string | number) => Promise<unknown>;
+  onNotification?: (method: string, params: unknown) => void;
+  onDisconnect?: () => void;
+  constructor(executable = findExecutable('codex'), args = ['app-server']) {
     if (!executable) throw new Error('Codex CLI not installed.');
-    this.child = spawn(executable, ['app-server'], { stdio: 'pipe', windowsHide: true });
+    this.child = spawn(
+      this.ownership ? process.execPath : executable,
+      this.ownership ? [commandHost, executable, ...args] : args,
+      { stdio: 'pipe', windowsHide: true },
+    );
+    if (this.ownership) {
+      try {
+        if (!this.child.pid) throw new Error('Codex command host failed to start.');
+        this.ownership.assign(this.child.pid);
+        this.child.stdin.write('KODE_GO\n');
+      } catch (error) {
+        this.child.kill();
+        this.ownership.close();
+        throw error;
+      }
+    }
     this.child.stderr.on('data', () => {});
     this.child.stdout.on('data', (chunk: Buffer) => {
       this.buffer += chunk.toString();
@@ -57,7 +76,7 @@ export class CodexConnection {
         const line = this.buffer.slice(0, index);
         this.buffer = this.buffer.slice(index + 1);
         let message: {
-          id?: number;
+          id?: number | string;
           method?: string;
           params?: unknown;
           result?: unknown;
@@ -69,15 +88,28 @@ export class CodexConnection {
           continue;
         }
         if (message.method && message.id !== undefined) {
+          const key = JSON.stringify(message.id),
+            fingerprint = JSON.stringify({ method: message.method, params: message.params });
+          const previous = this.serverRequests.get(key);
+          if (previous) {
+            if (previous !== fingerprint) this.close();
+            continue;
+          }
+          if (this.serverRequests.size >= 2048) {
+            this.close();
+            return;
+          }
+          this.serverRequests.set(key, fingerprint);
           const handler = this.onRequest;
           void (
             handler
-              ? handler(message.method, message.params)
+              ? handler(message.method, message.params, message.id)
               : Promise.resolve({ decision: 'decline' })
           )
-            .then((result) =>
-              this.child.stdin.write(JSON.stringify({ id: message.id, result }) + '\n'),
-            )
+            .then((result) => {
+              if (!this.child.stdin.destroyed && !this.child.stdin.writableEnded)
+                this.child.stdin.write(JSON.stringify({ id: message.id, result }) + '\n');
+            })
             .catch(() =>
               this.child.stdin.write(
                 JSON.stringify({
@@ -87,19 +119,25 @@ export class CodexConnection {
               ),
             );
         } else if (message.method) {
+          this.onNotification?.(message.method, message.params);
           this.notifications.push({ method: message.method, params: redact(message.params) });
           if (this.notifications.length > 1000) this.notifications.shift();
         } else if (message.id !== undefined) {
-          const p = this.pending.get(message.id);
+          const p = this.pending.get(Number(message.id));
           if (!p) continue;
-          this.pending.delete(message.id);
+          this.pending.delete(Number(message.id));
           clearTimeout(p.timer);
           if (message.error) p.reject(new Error(JSON.stringify(redact(message.error))));
           else p.resolve(message.result);
         }
       }
     });
+    let disconnected = false;
     const fail = () => {
+      if (disconnected) return;
+      disconnected = true;
+      this.ownership?.close();
+      this.onDisconnect?.();
       for (const p of this.pending.values()) {
         clearTimeout(p.timer);
         p.reject(new Error('Codex connection closed.'));
@@ -108,11 +146,12 @@ export class CodexConnection {
     };
     this.child.on('error', fail);
     this.child.on('close', fail);
+    this.child.stdin.on('error', fail);
   }
-  async initialize() {
+  async initialize(options: { experimentalApi?: boolean } = {}) {
     const result = await this.request('initialize', {
       clientInfo: { name: 'kode_p00', version: '0.1.0' },
-      capabilities: { experimentalApi: false },
+      capabilities: { experimentalApi: options.experimentalApi ?? false },
     });
     this.child.stdin.write(JSON.stringify({ method: 'initialized' }) + '\n');
     return result;
@@ -130,7 +169,8 @@ export class CodexConnection {
   }
   close() {
     this.child.stdin.end();
-    this.child.kill();
+    if (this.ownership) this.ownership.close();
+    else this.child.kill();
   }
 }
 

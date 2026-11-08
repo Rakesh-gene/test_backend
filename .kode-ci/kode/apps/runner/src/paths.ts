@@ -37,6 +37,10 @@ export async function workspacePaths(root: string) {
   if ((await lstat(state)).isSymbolicLink())
     throw new Error('Kode state directory must not be a symlink or junction.');
   if (process.platform !== 'win32') await chmod(state, 0o700);
+  const control = join(state, 'control');
+  await mkdir(control, { recursive: true, mode: 0o700 });
+  if ((await lstat(control)).isSymbolicLink())
+    throw new Error('Kode control directory must not be a symlink.');
   for (const name of ['state.sqlite', 'control.token', 'runner.lock', 'runner.log']) {
     const entry = await lstat(join(state, name)).catch((error: NodeJS.ErrnoException) => {
       if (error.code === 'ENOENT') return undefined;
@@ -45,12 +49,16 @@ export async function workspacePaths(root: string) {
     if (entry?.isSymbolicLink()) throw new Error(`Kode state file ${name} must not be a symlink.`);
   }
   const ipcDir = join(tmpdir(), `kode-${key}`);
+  const token = join(control, 'control.token');
+  if ((await lstat(token).catch(() => undefined))?.isSymbolicLink())
+    throw new Error('Kode control token must not be a symlink.');
   await mkdir(ipcDir, { recursive: true, mode: 0o700 });
   return {
     root: canonical,
     state,
     database: join(state, 'state.sqlite'),
-    token: join(state, 'control.token'),
+    token,
+    control,
     lease: join(state, 'runner.lock'),
     log: join(state, 'runner.log'),
     endpoint:

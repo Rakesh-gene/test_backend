@@ -6,6 +6,8 @@
   },
   "include": ["src/**/*"],
   "references": [
+    { "path": "../../packages/execution" },
+    { "path": "../../packages/providers" },
     { "path": "../../packages/workspace" },
     {
       "path": "../../packages/contracts"

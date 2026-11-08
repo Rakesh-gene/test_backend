@@ -11,6 +11,11 @@ import {
   atomicJson,
   json,
   leased,
+  configureExecution,
+  executionPolicy,
+  recoverContainers,
+  withExecution,
+  type Execution,
   type Observer,
 } from '@kode/workspace';
 import type { Request } from '@kode/contracts';
@@ -38,6 +43,7 @@ interface Job {
   kind: string;
   root: string;
   tree?: string;
+  execution?: Execution;
   result?: unknown;
   error?: string;
   traceContext?: TraceCarrier;
@@ -65,6 +71,7 @@ export function workspaceMethods(
   return {
     workspace,
     async recover() {
+      await recoverContainers(workspace.state);
       const directory = join(workspace.state, 'jobs');
       const files = await readdir(directory).catch((error: NodeJS.ErrnoException) => {
         if (error.code === 'ENOENT') return [];
@@ -120,6 +127,22 @@ export function workspaceMethods(
     async handle(request: Request): Promise<unknown> {
       const params = request.params;
       switch (request.method) {
+        case 'execution.configure': {
+          if (active.size)
+            throw new Error('Wait for active commands before changing execution policy.');
+          const p = z
+            .object({
+              mode: z.enum(['native', 'container']),
+              image: z.string().min(1).max(300).optional(),
+            })
+            .strict()
+            .parse(params);
+          if (p.mode === 'container' && !p.image)
+            throw new Error('Select a local container image.');
+          return configureExecution(workspace.state, p.mode === 'container' ? p.image : undefined);
+        }
+        case 'execution.inspect':
+          return executionPolicy(workspace.state);
         case 'workspace.init':
           return workspace.init();
         case 'folder.list':
@@ -175,17 +198,36 @@ export function workspaceMethods(
             commands: Object.keys(manifest.commands),
             services: Object.keys(manifest.services),
             dependencies: manifest.dependencies,
-            executionBoundary:
-              'cwd and managed-file scope only; arbitrary commands require write scope and are not OS-sandboxed',
+            executionBoundary: await executionPolicy(workspace.state),
           };
         }
         case 'env.inspect': {
+          if ((await executionPolicy(workspace.state)).mode === 'container')
+            throw new Error(
+              'Native environment receipts cannot validate container dependencies. Run declared preparation inside the selected task tree; container receipt adapters are not available yet.',
+            );
           const p = Target.parse(params);
           return prepareEnvironment(workspace, p.root, { treeId: p.tree, inspect: true });
         }
         case 'job.start': {
           const p = JobStart.parse(params);
           const destination = await target(p, true);
+          const policy = await executionPolicy(workspace.state);
+          if (policy.mode === 'container') {
+            if (!destination.tree)
+              throw new Error(
+                'Container commands require an isolated task tree. Source installations are preserved.',
+              );
+            if (p.kind === 'environment')
+              throw new Error(
+                'Native environment preparation is disabled in container mode; run the declared setup command in the task tree.',
+              );
+            const manifest = await loadManifest(destination.path);
+            if (manifest.commands[p.command ?? '']?.services.length)
+              throw new Error(
+                'Strict container commands do not expose host services or ports. No native fallback.',
+              );
+          }
           if (p.kind === 'command' && !p.command) throw new Error('A named command is required.');
           const id = randomUUID();
           const controller = new AbortController();
@@ -195,6 +237,7 @@ export function workspaceMethods(
             kind: p.kind,
             root: destination.root.id,
             tree: p.tree,
+            execution: policy,
             traceContext: captureTraceContext(),
             ...traceCorrelation(),
           };
@@ -250,7 +293,10 @@ export function workspaceMethods(
               Object.assign(job, traceCorrelation());
               await atomicJson(file, job); // Persist correlation before any external dispatch.
               await observe({ phase: 'job', name: id, status: 'running', dispatch: 'pending' });
-              await execute();
+              await withExecution(
+                { policy, control: join(workspace.state, 'control'), root: destination.path },
+                execute,
+              );
               if (job.status !== 'passed')
                 span.setStatus({ code: SpanStatusCode.ERROR, message: `Job ${job.status}` });
             });

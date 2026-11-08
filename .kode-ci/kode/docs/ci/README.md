@@ -53,3 +53,9 @@ The frontend lint command explicitly selects its existing ESLint legacy config.
 CI deadline; the developer default remains 90000 ms. The observed configured deadline
 is recorded per check. No platform gate closes before its native job passes and its
 reports are inspected.
+
+The GAP-005 update adds standard backpressure metrics and real kill/restart tests
+to the full suite (31 tests), plus a ten-second native PTY load regression per job.
+Only allowlisted JSON reports are uploaded. The separate ten-minute Windows load
+qualification is documented in [the GAP-005 report](../gap-reports/GAP-005.md);
+the short CI runs do not establish a ten-minute latency result for every platform.

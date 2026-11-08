@@ -153,7 +153,8 @@ partially prepared data and prevents a false cache hit.
 
 `tree cleanup` refuses active leases and evidence-retained trees. It removes only
 the selected Kode-owned tree; baselines, source installations and manager caches are
-retained. Windows teardown uses owned PID trees via `taskkill /T`; Unix uses owned
-process groups. OS refusal is an explicit failed teardown. Detached processes that
-escape those mechanisms, especially a Windows child outliving an already-exited
-parent, require additional P12 containment before they can be advertised as covered.
+retained. Windows native commands now enter a kill-on-close Job Object before dispatch, including
+detached descendants and owner death. Unix native commands retain process-group limits.
+Optional strict container execution provides a separate PID namespace, scoped task-tree
+mount and protected lifecycle guard. See [GAP-007](gap-reports/GAP-007.md) for evidence,
+configuration and the explicit native/container dependency and service boundaries.

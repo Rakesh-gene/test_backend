@@ -5,8 +5,14 @@ import { execa } from 'execa';
 import { parseDocument, stringify } from 'yaml';
 import { z } from 'zod';
 import { redact, safeTerminal } from '@kode/contracts';
-import { findExecutable } from '@kode/execution';
+import {
+  findExecutable,
+  effectiveEnvironment,
+  windowsOwnership,
+  commandHost,
+} from '@kode/execution';
 import { inside, scoped } from './state.js';
+import { containerCommand } from './isolation.js';
 
 const relativePath = z
   .string()
@@ -184,32 +190,64 @@ export async function startProcess(
   extraEnv: Record<string, string> = {},
 ) {
   const executable = spec.run[0]!;
-  const resolved =
-    findExecutable(executable) ?? (executable === process.execPath ? process.execPath : undefined);
-  if (!resolved) throw new Error(`Missing tool '${executable}'; install it and add it to PATH.`);
   const cwd = await commandDirectory(root, spec);
-  const env = Object.fromEntries(
-    Object.entries({ ...spec.env, ...extraEnv }).map(([key, value]) => [
-      key,
-      substitute(value, ports),
-    ]),
+  const env = effectiveEnvironment(
+    Object.fromEntries(
+      Object.entries({ ...spec.env, ...extraEnv }).map(([key, value]) => [
+        key,
+        substitute(value, ports),
+      ]),
+    ),
   );
+  const isolated = await containerCommand(
+    root,
+    cwd,
+    spec.run.map((arg) => substitute(arg, ports)),
+    Object.fromEntries(
+      Object.entries({ ...spec.env, ...extraEnv }).map(([key, value]) => [
+        key,
+        substitute(value, ports),
+      ]),
+    ),
+  );
+  const resolved =
+    isolated?.executable ??
+    findExecutable(executable, env.PATH) ??
+    (executable === process.execPath ? process.execPath : undefined);
+  if (!resolved) throw new Error(`Missing tool '${executable}'; install it and add it to PATH.`);
   const secrets = secretValues({ ...process.env, ...env });
+  const ownership = windowsOwnership();
+  const args = isolated?.args ?? spec.run.slice(1).map((arg) => substitute(arg, ports));
   const child = execa(
-    resolved,
-    spec.run.slice(1).map((arg) => substitute(arg, ports)),
+    ownership ? process.execPath : resolved,
+    ownership ? [commandHost, resolved, ...args] : args,
     {
       cwd,
-      env,
+      env: isolated ? process.env : env,
+      extendEnv: false,
       reject: false,
       windowsHide: true,
-      stdin: 'ignore',
+      stdin: ownership || isolated ? 'pipe' : 'ignore',
       detached: process.platform !== 'win32',
       maxBuffer: 256 * 1024,
       timeout: spec.timeout_seconds * 1000,
       forceKillAfterDelay: 500,
     },
   );
+  if (ownership) {
+    try {
+      if (!child.pid) throw new Error('Command host failed to start.');
+      ownership.assign(child.pid);
+      child.nodeChildProcess.once('exit', () => ownership.close());
+      if (isolated) child.stdin!.write('KODE_GO\n');
+      else child.stdin!.end('KODE_GO\n');
+    } catch (error) {
+      child.kill();
+      ownership.close();
+      void child.catch(() => {});
+      throw error;
+    }
+  }
   // Attach immediately so startup/output/timeout failures never become unhandled rejections.
   const settled = child.then(
     (result) => result,
@@ -225,6 +263,19 @@ export async function startProcess(
     return (stopping ??= terminate());
   }
   async function terminate() {
+    if (isolated) {
+      try {
+        await isolated.cleanup();
+      } finally {
+        child.stdin?.end();
+        ownership?.close();
+      }
+      return;
+    }
+    if (ownership) {
+      ownership.close();
+      return;
+    }
     if (child.pid) {
       if (process.platform === 'win32') {
         if (

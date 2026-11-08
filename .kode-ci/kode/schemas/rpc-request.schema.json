@@ -36,8 +36,16 @@
         "repo.inspect",
         "env.inspect",
         "job.start",
+        "execution.configure",
+        "execution.inspect",
         "job.get",
-        "job.cancel"
+        "job.cancel",
+        "agent.start",
+        "agent.get",
+        "agent.cancel",
+        "approval.list",
+        "approval.get",
+        "approval.decide"
       ]
     },
     "params": {
